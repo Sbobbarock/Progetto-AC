@@ -11,8 +11,6 @@
 #define BUF_SIZE 10
 #define IP "127.0.0.1"
 
-
-
 int main(int n_args, char** args){
     int porta;
     int ret;
@@ -22,12 +20,13 @@ int main(int n_args, char** args){
     struct sockaddr_in server;
     fd_set MASTER, READY;
     int max_fd;
+    int dim_msg;
 
     if(n_args != 2){
         printf("Errore: numero di porta non inserito\n");
         exit(0);
     }
-    ret = sscanf(args[1],"%d",&porta); // OVERFLOW?
+    ret = sscanf(args[1],"%d",&porta); /* OVERFLOW? */
     if(!ret){
         printf("Numero di porta non valido\n");
         exit(0);
@@ -57,23 +56,33 @@ int main(int n_args, char** args){
             if(!FD_ISSET(i,&READY))
                 continue;
             else if(i == STDIN_FILENO){
-                /* 
                 fgets(buffer,BUF_SIZE,stdin);
                 printf("Letto e invio: %s",buffer);
-                send(sd,buffer,BUF_SIZE,0); // gestione errore se non manda tutti i byte? 
-                */
-                
+                //esempio di come inviare un intero sul network
+                dim_msg = strlen(buffer)+1;
+                dim_msg = htonl(dim_msg); //standardizza la endianess 
+                send(sd,&dim_msg,sizeof(uint32_t),0); // gestione errore se non manda tutti i byte? 
+
+                //dopo aver inviato la dimensione del pacchetto, invio il pacchetto vero e propio
+                dim_msg = ntohl(dim_msg); //ripristina la endianess usata del sistema
+                send(sd,buffer,dim_msg,0);
             }
             else if(i == sd){
-                /* 
-                ret = recv(i,buffer,BUF_SIZE,0);
+                //ricevo prima la dimensione del pacchetto
+                ret = recv(i,&dim_msg,sizeof(uint32_t),0);
+                dim_msg = ntohl(dim_msg);
                 if(!ret){
                     close(i);
                     FD_CLR(i,&MASTER);
                     exit(0); 
                 }
-                printf("RICEVUTO: %s",buffer);
-                */
+                ret = recv(i,buffer,dim_msg,0);
+                if(!ret){
+                    close(i);
+                    FD_CLR(i,&MASTER);
+                    exit(0); 
+                }
+                printf("RICEVUTO: %s",buffer);  
             }
         }
     }
