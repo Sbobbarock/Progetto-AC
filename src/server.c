@@ -23,15 +23,15 @@ void send_packet(int sd,char* msg){
 
     ret = send(sd,&dim_msg,sizeof(uint32_t),0);
     if(!ret){
-            close(sd);
-            pthread_exit(NULL);
+            perror("Errore:");
+            return;
     }
 
     dim_msg = ntohl(dim_msg);
     ret = send(sd,msg,dim_msg,0);
     if(!ret){
-        close(sd);
-        pthread_exit(NULL);
+        perror("Errore:");
+        return;
     }
 }
 
@@ -42,18 +42,25 @@ char* recv_packet(int sd){
     int dim_msg;
 
     ret = recv(sd,&dim_msg,sizeof(uint32_t),0);
-    if(!ret)
+    if(!ret){
+        close(sd);
+        pthread_exit(NULL);
         return NULL;
+    }
 
     dim_msg = ntohl(dim_msg);
     buffer = malloc(dim_msg);
-    if(!buffer)
+    if(!buffer){
+        close(sd);
+        pthread_exit(NULL);
         return NULL;
-
+    }
     ret = recv(sd,buffer,dim_msg,0);
-    if(!ret)
+   if(!ret){
+        close(sd);
+        pthread_exit(NULL);
         return NULL;
-    
+    }
     return buffer;
 }
 
