@@ -49,7 +49,7 @@ char* recv_packet(int sd){
     }
 
     dim_msg = ntohl(dim_msg);
-    buffer = malloc(dim_msg);
+    buffer = (char*)malloc(dim_msg);
     if(!buffer){
         close(sd);
         pthread_exit(NULL);
@@ -147,14 +147,14 @@ int main(int n_args, char** args){
                 
             }
             else if(i == listener){ /* richiesta di connessione al server */
-                int addrlen = sizeof(client);
+                socklen_t addrlen = sizeof(client);
                 client_sd = (int *)malloc(sizeof(int));
                 if(!client_sd){
                     printf("Errore\n");
                     exit(0);
                 }
                 *client_sd = accept(listener,(struct sockaddr*)&client,&addrlen);
-                if(pthread_create(&thread_id,NULL,(void*)manageConnection,(void*)client_sd)){ //crea un nuovo thread che gestisce il socket client-server
+                if(pthread_create(&thread_id,NULL,manageConnection,(void*)client_sd)){ //crea un nuovo thread che gestisce il socket client-server
                     printf("Errore creazione del thread\n");
                     close(*client_sd);
                 }
