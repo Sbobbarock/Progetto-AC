@@ -8,13 +8,14 @@
 #include <sys/types.h>
 #include <string.h>
 #include <pthread.h>
+#include <iostream>
 
-#define BUF_SIZE 10
+#define MAX_USER_INPUT 10
 #define MAX_CONNECTED 5
 
-////////////////////////////////////
-// COMPILARE CON FLAG -lpthread !//
-//////////////////////////////////
+/////////////////////////////////////
+//// COMPILE WITH FLAG -lpthread ///
+///////////////////////////////////
 
 //invia la dimensione del pacchetto e successivamente il pacchetto stesso
 void send_packet(int sd,char* msg){
@@ -23,44 +24,55 @@ void send_packet(int sd,char* msg){
 
     ret = send(sd,&dim_msg,sizeof(uint32_t),0);
     if(!ret){
-            perror("Errore:");
-            return;
+        free(msg);
+        close(sd);
+        std::cout<<"Client disconnected\n";
+        pthread_exit(NULL);
     }
+    while(ret < sizeof(uint32_t))
+        ret += send(sd,&dim_msg,sizeof(uint32_t),0);
 
     dim_msg = ntohl(dim_msg);
+
     ret = send(sd,msg,dim_msg,0);
     if(!ret){
-        perror("Errore:");
-        return;
+        free(msg);
+        close(sd);
+        std::cout<<"Client disconnected\n";
+        pthread_exit(NULL);
     }
+    while(ret < dim_msg)
+        ret += send(sd,msg,dim_msg,0);
+
+    free(msg);
 }
 
 //riceve la dimensione del pacchetto e successivamente il pacchetto stesso
 char* recv_packet(int sd){
     int ret;
-    char * buffer;
+    char* buffer;
     int dim_msg;
 
     ret = recv(sd,&dim_msg,sizeof(uint32_t),0);
-    if(!ret){
-        close(sd);
-        pthread_exit(NULL);
+    if(!ret)
         return NULL;
-    }
 
     dim_msg = ntohl(dim_msg);
+
     buffer = (char*)malloc(dim_msg);
     if(!buffer){
-        close(sd);
-        pthread_exit(NULL);
+        std::cerr<<"Buffer allocation for received packet failed\n";
         return NULL;
     }
     ret = recv(sd,buffer,dim_msg,0);
-   if(!ret){
-        close(sd);
-        pthread_exit(NULL);
+    if(!ret){
+        free(buffer);
         return NULL;
     }
+    while(ret < dim_msg)
+        ret += recv(sd,buffer,dim_msg,0);
+    //sanitize buffer
+    buffer[dim_msg-1] = '\0';
     return buffer;
 }
 
@@ -75,10 +87,11 @@ void* manageConnection(void* s){
         buffer = recv_packet(soc);
         if(!buffer){
             close(soc);
+            std::cout<<"Client disconnected\n";
             pthread_exit(NULL);
         }
-        printf("Ricevuto: %s",buffer);
-        printf("INVIO: %s",buffer);
+        std::cout<<"Ricevuto: "<<buffer<<std::endl;
+        std::cout<<"Invio: "<<buffer<<std::endl;
 
         send_packet(soc,buffer);
     }
@@ -92,8 +105,7 @@ int main(int n_args, char** args){
     socklen_t len;
     struct sockaddr_in server, client;
     int ret; /*controllo errori */
-    char buffer[BUF_SIZE];
-    char input[BUF_SIZE];
+    char user_input[MAX_USER_INPUT];
 
     /* variabili multiplexing I/O */
     int max_fd;
@@ -103,29 +115,33 @@ int main(int n_args, char** args){
     pthread_t thread_id;
 
     if(n_args != 2){
-        printf("Errore: numero di porta non inserito\n");
-        exit(0);
+        std::cout<<"Errore: numero di porta non inserito\n";
+        exit(1);
     }
-    ret = sscanf(args[1],"%d",&porta); /* OVERFLOW? */
+    ret = sscanf(args[1],"%d",&porta);
     if(!ret){
-        printf("Numero di porta non valido\n");
-        exit(0);
+        std::cout<<"Numero di porta non valido\n";
+        exit(1);
     }
     
     /* inizializzo socket listener */
     listener = socket(AF_INET,SOCK_STREAM,0);
+    if(listener == -1){
+        perror("Error: ");
+        exit(1);
+    }
     memset(&server,0,sizeof(struct sockaddr_in));
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons(porta);
 
     if(bind(listener,(struct sockaddr*)&server,sizeof(server)) == -1){
-        perror("Errore: ");
-        exit(0);
+        perror("Error: ");
+        exit(1);
     }
     if(listen(listener,MAX_CONNECTED) == -1){
-        perror("Errore: ");
-        exit(0);
+        perror("Error: ");
+        exit(1);
     }
 
     FD_ZERO(&MASTER);
@@ -141,25 +157,44 @@ int main(int n_args, char** args){
             if(!FD_ISSET(i,&READY))
                 continue;
             else if(i == STDIN_FILENO){   
-                
-                fgets(buffer,BUF_SIZE,stdin); // NON SICURO: SOLO PER PROVA 
-                printf("Letto: %s",buffer);
-                
+                if(!fgets(user_input,MAX_USER_INPUT,stdin)){
+                    std::cerr<<"Error in reading user input\n";
+                    exit(1);
+                }
+                char* p = strchr(user_input,'\n');
+                if(p)
+                    *p = '\0';
+                else{
+                    scanf("%*[^\n]");
+                    scanf("%*c");
+                }
+                std::cout<<"Letto da stdin: "<<user_input<<std::endl;
             }
             else if(i == listener){ /* richiesta di connessione al server */
                 socklen_t addrlen = sizeof(client);
                 client_sd = (int *)malloc(sizeof(int));
+
                 if(!client_sd){
-                    printf("Errore\n");
-                    exit(0);
+                    close(listener);
+                    std::cerr<<"Error in allocating client struct\n";
+                    exit(1);
                 }
+
                 *client_sd = accept(listener,(struct sockaddr*)&client,&addrlen);
+                if(*client_sd == -1){
+                    perror("Error: ");
+                    close(listener);
+                    free(client_sd);
+                    exit(1);
+                }
                 if(pthread_create(&thread_id,NULL,manageConnection,(void*)client_sd)){ //crea un nuovo thread che gestisce il socket client-server
-                    printf("Errore creazione del thread\n");
+                    std::cout<<"Errore creazione del thread\n";
                     close(*client_sd);
+                    close(listener);
+                    free(client_sd);
                 }
             }
         }
     }
-
+    close(listener);
 }
