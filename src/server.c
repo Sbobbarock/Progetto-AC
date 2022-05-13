@@ -8,92 +8,201 @@
 #include <sys/types.h>
 #include <string.h>
 #include <pthread.h>
+#include <fstream>
 #include <iostream>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
 
 #define MAX_USER_INPUT 10
 #define MAX_CONNECTED 5
+#define MAX_USERNAME 20
+#define NONCE_LEN 16
 
 /////////////////////////////////////
 //// COMPILE WITH FLAG -lpthread ///
 ///////////////////////////////////
 
-//invia la dimensione del pacchetto e successivamente il pacchetto stesso
-void send_packet(int sd,char* msg){
-    int ret;
-    int dim_msg = htonl(strlen(msg)+1);
+bool send_packet(int sd,unsigned char* msg,int len){
+    int ret = 0;
 
-    ret = send(sd,&dim_msg,sizeof(uint32_t),0);
-    if(!ret){
-        free(msg);
-        close(sd);
-        std::cout<<"Client disconnected\n";
-        pthread_exit(NULL);
-    }
-    while(ret < sizeof(uint32_t))
-        ret += send(sd,&dim_msg,sizeof(uint32_t),0);
-
-    dim_msg = ntohl(dim_msg);
-
-    ret = send(sd,msg,dim_msg,0);
-    if(!ret){
-        free(msg);
-        close(sd);
-        std::cout<<"Client disconnected\n";
-        pthread_exit(NULL);
-    }
-    while(ret < dim_msg)
-        ret += send(sd,msg,dim_msg,0);
-
-    free(msg);
+    do{
+        ret += send(sd,msg,len,0);
+        if(!ret)
+            return false;
+    }while(ret < len);
+    return true;
 }
 
-//riceve la dimensione del pacchetto e successivamente il pacchetto stesso
-char* recv_packet(int sd){
+unsigned char* recv_packet(int sd,int len){
     int ret;
-    char* buffer;
+    unsigned char* buffer;
     int dim_msg;
 
-    ret = recv(sd,&dim_msg,sizeof(uint32_t),0);
-    if(!ret)
-        return NULL;
-
-    dim_msg = ntohl(dim_msg);
-
-    buffer = (char*)malloc(dim_msg);
+    buffer = (unsigned char*)malloc(len);
     if(!buffer){
         std::cerr<<"Buffer allocation for received packet failed\n";
         return NULL;
     }
-    ret = recv(sd,buffer,dim_msg,0);
+    ret = recv(sd,buffer,len,0);
     if(!ret){
         free(buffer);
         return NULL;
     }
-    while(ret < dim_msg)
-        ret += recv(sd,buffer,dim_msg,0);
-    //sanitize buffer
-    buffer[dim_msg-1] = '\0';
+    while(ret < len)
+        ret += recv(sd,buffer,len,0);
+    
     return buffer;
+}
+
+void disconnect(int sd){
+    close(sd);
+    std::cout<<"Client disconnected\n";
+    pthread_exit(NULL);
 }
 
 // routine eseguita dal thread
 void* manageConnection(void* s){
     int ret = 0;
-    char* buffer;
+    uint32_t* len;
+    char* username;
+    unsigned char* buffer;
+    std::string client_check;
+    unsigned char* nonce_c;
     int soc = *((int*)s);
     int dim_msg;
-    // il client manda sempre il primo messaggio
+ 
     while(1){
-        buffer = recv_packet(soc);
-        if(!buffer){
-            close(soc);
-            std::cout<<"Client disconnected\n";
-            pthread_exit(NULL);
-        }
-        std::cout<<"Ricevuto: "<<buffer<<std::endl;
-        std::cout<<"Invio: "<<buffer<<std::endl;
+        username = (char*)recv_packet(soc,MAX_USERNAME);
+        if(!username)
+            disconnect(soc);
+        //ricevo username e nonce
+        username[MAX_USERNAME-1] = '\0';
+        nonce_c = recv_packet(soc,NONCE_LEN);
+        if(!nonce_c)
+            disconnect(soc);
 
-        send_packet(soc,buffer);
+        //check del nome utente dal file client_list.txt
+        std::ifstream user_file;
+        user_file.open("client_list.txt");
+        while(std::getline(user_file,client_check)){
+            if(!client_check.compare(username)){
+               std::cout<<"NOME VALIDO\n";
+                break;     
+            }
+        }
+        //nome utente non trovato
+        if(user_file.eof()){
+            user_file.close();
+            std::cout<<"Nome utente non valido\n";
+            disconnect(soc);
+        }
+        user_file.close();
+
+        EVP_PKEY* dh_params;
+        dh_params = EVP_PKEY_new();
+        EVP_PKEY_set1_DH(dh_params, DH_get_2048_224());
+        EVP_PKEY_CTX* dh_ctx = EVP_PKEY_CTX_new(dh_params,NULL);
+        EVP_PKEY* my_privkey = NULL;
+        EVP_PKEY_keygen_init(dh_ctx);
+        EVP_PKEY_keygen(dh_ctx,&my_privkey);
+
+        FILE* pubkey_PEM = fopen("dh_pubkey.pem","w+");
+        ret = PEM_write_PUBKEY(pubkey_PEM,my_privkey);
+        if(ret != 1){
+            std::cout<<"Errore nella generazione della chiave pubblica\n";
+            EVP_PKEY_free(my_privkey);
+            fclose(pubkey_PEM);
+            EVP_PKEY_CTX_free(dh_ctx);
+            disconnect(soc);
+        }
+        fseek(pubkey_PEM,0,SEEK_SET);
+        EVP_PKEY* my_pubkey = PEM_read_PUBKEY(pubkey_PEM,NULL,NULL,NULL);
+        if(!my_pubkey){
+            std::cout<<"Errore nella generazione della chiave pubblica\n";
+            EVP_PKEY_free(my_privkey);
+            fclose(pubkey_PEM);
+            EVP_PKEY_CTX_free(dh_ctx);
+            disconnect(soc);
+        }
+        fseek(pubkey_PEM,0,SEEK_END);
+        *len = ftell(pubkey_PEM);
+        ///////////////////
+        //CHECK OVERFLOW//
+        /////////////////
+        rewind(pubkey_PEM);
+
+        unsigned char* pub_key_msg = (unsigned char*)malloc(*len);
+        fread(pub_key_msg,1,*len,pubkey_PEM);
+        if(!pub_key_msg){
+            std::cout<<"Errore malloc()\n";
+            EVP_PKEY_free(my_privkey);
+            fclose(pubkey_PEM);
+            EVP_PKEY_CTX_free(dh_ctx);
+            disconnect(soc);
+        }
+        *len = htonl(*len);
+        if(!send_packet(soc,(unsigned char*)len,sizeof(uint32_t))){
+            disconnect(soc);
+        }
+        *len = ntohl(*len);
+        if(!send_packet(soc,pub_key_msg,*len)){
+            disconnect(soc);
+        }
+        fclose(pubkey_PEM);
+
+        len = (uint32_t*)recv_packet(soc,sizeof(uint32_t));
+        *len = ntohl(*len);
+        ///////////////////
+        //CHECK OVERFLOW//
+        /////////////////
+        buffer = (unsigned char*)malloc((size_t)*len);
+        if(!buffer){
+            std::cout<<"Errore malloc()\n";
+            EVP_PKEY_free(my_privkey);
+            fclose(pubkey_PEM);
+            EVP_PKEY_CTX_free(dh_ctx);
+            disconnect(soc);////da rivedere!!!!
+        }
+        buffer = recv_packet(soc,*len);
+
+        FILE* pem = fopen("client_pubkey.pem","w+");// GENERARE NOME FILE DINAMICAMENTE
+        ret = fwrite(buffer,1,*len,pem);
+        if(ret < *len){
+            std::cout<<"Errore scrittura del server_pubkey.pem\n";
+            fclose(pem);
+            disconnect(soc);
+            ////////////
+            // check della deallocazione!!!!
+            ///////////////////
+        }
+        fseek(pem,0,SEEK_SET);
+        EVP_PKEY* client_pubkey = PEM_read_PUBKEY(pem,NULL,NULL,NULL);
+        if(!client_pubkey){
+            std::cout<<"Errore nella lettura della chiave pubblica del client\n";
+            EVP_PKEY_free(my_privkey);
+            fclose(pem);
+            EVP_PKEY_CTX_free(dh_ctx);
+            close(soc);
+            exit(1);//da riguardare!!!!!
+        }
+        fclose(pem);
+
+        EVP_PKEY_CTX* ctx_drv = EVP_PKEY_CTX_new(my_privkey,NULL);
+        EVP_PKEY_derive_init(ctx_drv);
+        EVP_PKEY_derive_set_peer(ctx_drv,client_pubkey);
+        unsigned char* K_ab;
+        size_t secret_len;
+        EVP_PKEY_derive(ctx_drv,NULL,&secret_len);
+
+        K_ab = (unsigned char*)malloc(secret_len);
+        if(!K_ab){
+            std::cout<<"Errore nella malloc()\n";
+            exit(1); //da riguardare!!!!!
+        }
+        EVP_PKEY_derive(ctx_drv,K_ab,&secret_len);
+        /////////////////////////
+        // COMPUTE DIGEST OF K_ab
+        //////////////////////// 
     }
 }
 
