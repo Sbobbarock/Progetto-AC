@@ -1,17 +1,11 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <string.h>
-#include <iostream>
 #include <openssl/rand.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-
+#include "../lib/packet.h"
+#include "../lib/DH.h"
 
 #define IP "127.0.0.1"
 #define MAX_USER_INPUT 10
@@ -29,43 +23,14 @@ bool check_string(std::string s){
     return true;
 }
 
-bool send_packet(int sd,unsigned char* msg, int len){
-    int ret = 0;
-    do{
-        ret += send(sd,msg,len,0);
-        if(!ret)
-            return false;
-    }while(ret < len); 
-    return true;
-}
-
-unsigned char* recv_packet(int sd,int len){
-    int ret;
-    unsigned char* buffer;
-    int dim_msg;
-
-    buffer = (unsigned char*)malloc(len);
-    if(!buffer){
-        std::cerr<<"Buffer allocation for received packet failed\n";
-        return NULL;
-    }
-    ret = recv(sd,buffer,len,0);
-    if(!ret){
-        free(buffer);
-        return NULL;
-    }
-    while(ret < len)
-        ret += recv(sd,buffer,len,0);
-    
-    return buffer;
-}
-
 void handshake(int sd){
     int ret;
     uint32_t* len;
     unsigned char* buffer;
     unsigned char nonce_c[NONCE_LEN];
     std::string username;
+
+    //genero il nonce(C)
     RAND_poll();
     RAND_bytes(nonce_c,NONCE_LEN);
     do{
@@ -73,116 +38,109 @@ void handshake(int sd){
         std::cin>>username;
     }while(!check_string(username) || username.length() > MAX_USERNAME);
 
+    //standardizzo la lunghezza del nome utente
     username.resize(MAX_USERNAME);
-    send_packet(sd,(unsigned char*)username.c_str(),username.length()+1);
-    send_packet(sd,nonce_c,NONCE_LEN);
 
-    len = (uint32_t*)recv_packet(sd,sizeof(uint32_t));
-    *len = ntohl(*len);
-    ///////////////////
-    //CHECK OVERFLOW//
-    /////////////////
-    buffer = (unsigned char*)malloc((size_t)*len);
-    buffer = recv_packet(sd,*len);
-
-    FILE* pem = fopen("server_pubkey.pem","w+");
-    ret = fwrite(buffer,1,*len,pem);
-    if(ret < *len){
-        std::cout<<"Errore scrittura del server_pubkey.pem\n";
-        fclose(pem);
+    //invio nonce e nome utente
+    if(!send_packet<const char>(sd,username.c_str(),MAX_USERNAME)){
+        std::cout<<"Errore nell'invio del nome utente\n";
         close(sd);
         exit(1);
-        ////////////
-        // check della deallocazione!!!!
-        ///////////////////
     }
-    fseek(pem,0,SEEK_SET);
-    EVP_PKEY* server_pubkey = PEM_read_PUBKEY(pem,NULL,NULL,NULL);
-    if(!server_pubkey){
-        std::cout<<"Errore nella lettura della chiave pubblica del server\n";
-        fclose(pem);
+    if(!send_packet<unsigned char>(sd,nonce_c, NONCE_LEN)){
+        std::cout<<"Errore nell'invio del nonce\n";
         close(sd);
-        exit(1);//da riguardare!!!!!
+        exit(1);
     }
-    fclose(pem);
-
-    EVP_PKEY* dh_params;
-    dh_params = EVP_PKEY_new();
-    EVP_PKEY_set1_DH(dh_params, DH_get_2048_224());
-    EVP_PKEY_CTX* dh_ctx = EVP_PKEY_CTX_new(dh_params,NULL);
-    EVP_PKEY* my_privkey = NULL;
-    EVP_PKEY_keygen_init(dh_ctx);
-    EVP_PKEY_keygen(dh_ctx,&my_privkey);
-    //inviare la chiave pubblica al server firmata insieme al nonce del server!
-
-    FILE* pubkey_PEM = fopen("dh_pubkey.pem","w+");
-    ret = PEM_write_PUBKEY(pubkey_PEM,my_privkey);
-    if(ret != 1){
+    
+    //inizializzazione parametri DH e chiave privata
+    EVP_PKEY* my_privkey = DH_privkey();
+    //ricavo e leggo file PEM con la mia chiave pubblica
+    //genera dinamicamente il nome del file!
+    len = (uint32_t*)malloc(sizeof(uint32_t));
+    if(!len){
+        std::cout<<"Errore nella malloc()\n";
+        EVP_PKEY_free(my_privkey);
+        close(sd);
+        exit(1);
+    }
+    buffer = DH_pubkey(std::string("dh_myPUBKEY.pem"),my_privkey,len);
+    if(!buffer){
         std::cout<<"Errore nella generazione della chiave pubblica\n";
         EVP_PKEY_free(my_privkey);
-        fclose(pubkey_PEM);
-        EVP_PKEY_CTX_free(dh_ctx);
         close(sd);
-        exit(1);//da riguardare!!!!!
-    }
-    fseek(pubkey_PEM,0,SEEK_SET);
-    EVP_PKEY* my_pubkey = PEM_read_PUBKEY(pubkey_PEM,NULL,NULL,NULL);
-    if(!my_pubkey){
-        std::cout<<"Errore nella generazione della chiave pubblica\n";
+        free(len);
+        exit(1);
+    } 
+    //invio la dimensione del file PEM al server
+    *len = htonl(*len);
+    if(!send_packet<uint32_t>(sd,len,sizeof(uint32_t))){
+        std::cout<<"Errore nell'invio della dimensione del file PEM\n";
         EVP_PKEY_free(my_privkey);
-        fclose(pubkey_PEM);
-        EVP_PKEY_CTX_free(dh_ctx);
+        free(buffer);
+        free(len);
         close(sd);
-        exit(1);//da riguardare!!!!!
+        exit(1);
     }
-
-    fseek(pubkey_PEM,0,SEEK_END);
-    *len = ftell(pubkey_PEM);
+    *len = ntohl(*len);
+    //invio il file PEM con la chiave pubblica al server
+    if(!send_packet<unsigned char>(sd,buffer,*len)){
+        std::cout<<"Errore nell'invio del file PEM con la chiave pubblica\n";
+        EVP_PKEY_free(my_privkey);
+        free(buffer);
+        free(len);
+        close(sd);
+        exit(1);
+    }
+    free(len);
+    //ricevo la chiave pubblica del server
+    len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
+    if(!len){
+        std::cout<<"Errore nella ricezione della dimensione del file PEM\n";
+        EVP_PKEY_free(my_privkey);
+        free(buffer);
+        close(sd);
+        exit(1);
+    }
+    *len = ntohl(*len);
     ///////////////////
     //CHECK OVERFLOW//
     /////////////////
-    fseek(pubkey_PEM,0,SEEK_SET);
-
-    unsigned char* pub_key_msg = (unsigned char*)malloc(*len);
-    if(!pub_key_msg){
-        std::cout<<"Errore nella malloc()\n";
-        exit(1); //da riguardare!!!!!
-    }
-    ret = fread(pub_key_msg,1,*len,pubkey_PEM);
-    if(ret < *len){
-        std::cout<<"Errore nella lettura della chiave pubblica del client\n";
+    free(buffer);
+    buffer = recv_packet<unsigned char>(sd,*len);
+    if(!buffer){
+        std::cout<<"Chiave pubblica non ricevuta correttamente\n";
         EVP_PKEY_free(my_privkey);
-        fclose(pem);
-        EVP_PKEY_CTX_free(dh_ctx);
         close(sd);
-        exit(1); //da riguardare!!!!!
+        free(len);
+        exit(1);
+    }
+    //genera dinamicamente il nome del file!
+    EVP_PKEY* server_pubkey = DH_derive_pubkey(std::string("dh_serverpubkey.pem"),buffer,*len);
+    if(!server_pubkey){
+        std::cout<<"Errore nella derivazione della chiave pubblica ricevuta dal server\n";
+        EVP_PKEY_free(my_privkey);
+        free(len);
+        free(buffer);
+        close(sd);
+        exit(1);
     }
     
-    *len = htonl(*len);
-    if(!send_packet(sd,(unsigned char*)&len,sizeof(uint32_t))){
-        exit(1);//da riguardare!!!!!
-    }
-    *len = ntohl(*len);
-    if(!send_packet(sd,pub_key_msg,*len)){
-        exit(1);//da riguardare!!!!!
-    }
-    fclose(pubkey_PEM);
-    EVP_PKEY_CTX* ctx_drv = EVP_PKEY_CTX_new(my_privkey,NULL);
-    EVP_PKEY_derive_init(ctx_drv);
-    EVP_PKEY_derive_set_peer(ctx_drv,server_pubkey);
-    unsigned char* K_ab;
     size_t secret_len;
-    EVP_PKEY_derive(ctx_drv,NULL,&secret_len);
-
-    K_ab = (unsigned char*)malloc(secret_len);
+    unsigned char* K_ab = DH_derive_session_secret(my_privkey,server_pubkey,&secret_len);
     if(!K_ab){
-        std::cout<<"Errore nella malloc()\n";
-        exit(1); //da riguardare!!!!!
+        std::cout<<"Errore nella derivazione del segreto di sessione\n";
+        EVP_PKEY_free(my_privkey);
+        free(len);
+        free(buffer);
+        EVP_PKEY_free(server_pubkey);
+        close(sd);
+        exit(1);
     }
-    EVP_PKEY_derive(ctx_drv,K_ab,&secret_len);
+    exit(0);
     /////////////////////////
     // COMPUTE DIGEST OF K_ab
-    ////////////////////////   
+    //////////////////////// 
 }
 
 int main(int n_args, char** args){
