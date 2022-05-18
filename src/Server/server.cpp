@@ -1,28 +1,26 @@
 #include <unistd.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <sys/time.h>
-#include <string.h>
 #include <pthread.h>
 #include <fstream>
-#include "../lib/DH.h"
-#include "../lib/packet.h"
-
-#define MAX_USER_INPUT 10
-#define MAX_CONNECTED 5
-#define MAX_USERNAME 20
-#define NONCE_LEN 16
+#include "../lib/header/DH.h"
+#include "../lib/header/utility.h"
+#include "../lib/header/certificate.h"
+#include "../lib/header/signature.h"
 
 /////////////////////////////////////
 //// COMPILE WITH FLAG -lpthread ///
 ///////////////////////////////////
 
+/*Funzione per effettuare la disconnessione del client dal server. */
 void disconnect(int sd){
     close(sd);
     std::cout<<"Client disconnected\n";
     pthread_exit(NULL);
 }
 
+/*Funzione che controlla la validita' di una stringa. 
+  Si controlla che la stringa non e' vuota e che i caratteri che ne fanno parte siano consentiti. */
 bool check_string(std::string s){
     static char ok_chars[] = "abcdefghijklmnopqrstuvwxyz"
                             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -34,27 +32,31 @@ bool check_string(std::string s){
     return true;
 }
 
-// routine eseguita dal thread
-void* manageConnection(void* s){
+//restituisce la chiave di sessione K_ab
+unsigned char* handshake(int sd,unsigned int* key_len,char* username){
+
     int ret = 0;
-    char* username;
     std::string client_check;
     unsigned char* nonce_c;
-    int sd = *((int*)s);
     uint32_t* len;
  
     username = recv_packet<char>(sd,MAX_USERNAME);
     if(!username)
         disconnect(sd);
-    //ricevo username e nonce
+    
+    /******************************************************************************
+     1) Il server riceve nonce e username del client e ne controlla la validita'.
+     ********************************************************************************/
     username[MAX_USERNAME-1] = '\0';
     if(!check_string(std::string(username))){
         std::cout<<"Formato nome utente non valido\n";
+        free(username);
         disconnect(sd);
     }
     nonce_c = recv_packet<unsigned char>(sd,NONCE_LEN);
     if(!nonce_c){
         std::cout<<"Errore nella ricezione del nonce\n";
+        free(username);
         disconnect(sd);
     }
     //check del nome utente dal file client_list.txt
@@ -66,101 +68,328 @@ void* manageConnection(void* s){
             break;     
         }
     }
+    bool login_status = true;
     //nome utente non trovato
     if(user_file.eof()){
         user_file.close();
+        login_status = false;
         std::cout<<"Nome utente non valido\n";
+        send_packet<bool>(sd,&login_status,sizeof(bool));
         free(username);
+        free(nonce_c);
         disconnect(sd);
     }
     user_file.close();
-    //inizializzazione parametri DH e chiave privata
-    EVP_PKEY* my_privkey = DH_privkey();
+    
+    if(!send_packet<bool>(sd,&login_status,sizeof(bool))){
+        free(username);
+        free(nonce_c);
+        disconnect(sd);
+    }
+    /**************************************************************************************/
+
+
+
+    /**************************************************************************
+     2) Creazione della chiave privata e pubblica del server del protocollo DH. 
+        - inizializzo DH param e chiave privata del server 
+        - ricavo chiave pubblica server
+        - invio la chiave pubblica del server al client in file PEM 
+    ***************************************************************************/
+
+    EVP_PKEY* my_DHprivkey = DH_privkey();
+    EVP_PKEY* my_DHpubkey = EVP_PKEY_new();
     //ricavo e leggo file PEM con la mia chiave pubblica
     //genera dinamicamente il nome del file!
-    
     len = (uint32_t*)malloc(sizeof(uint32_t));
     if(!len){
         std::cout<<"Errore nella malloc()\n";
-        EVP_PKEY_free(my_privkey);
+        EVP_PKEY_free(my_DHprivkey);
+        free(nonce_c);
+        EVP_PKEY_free(my_DHpubkey);
         free(username);
         disconnect(sd);
     }
-    unsigned char* buffer = DH_pubkey(std::string("dh_myPUBKEY.pem"),my_privkey,len);
-    if(!buffer){
-        EVP_PKEY_free(my_privkey);
+    unsigned char* my_DH_pubkeyPEM = DH_pubkey(std::string("dh_myPUBKEY")+username+".pem",my_DHprivkey,my_DHpubkey,len);
+    if(!my_DH_pubkeyPEM){
+        EVP_PKEY_free(my_DHprivkey);
         free(username);
         free(len);
+        EVP_PKEY_free(my_DHpubkey);
+        free(nonce_c);
         disconnect(sd);
     }
-
+    
+    uint32_t my_DHpubkeyLEN = *len;
+    EVP_PKEY_free(my_DHpubkey);
     //invio la dimensione del file PEM al client
     *len = htonl(*len);
     if(!send_packet<uint32_t>(sd,len,sizeof(uint32_t))){
-        EVP_PKEY_free(my_privkey);
-        free(buffer);
+        EVP_PKEY_free(my_DHprivkey);
         free(len);
+        free(my_DH_pubkeyPEM);
+        free(nonce_c);
         free(username);
         disconnect(sd);
     }
-    *len = ntohl(*len);
+
     //invio il file PEM con la chiave pubblica al client
-    if(!send_packet<unsigned char>(sd,buffer,*len)){
-        EVP_PKEY_free(my_privkey);
-        free(buffer);
+    if(!send_packet<unsigned char>(sd,my_DH_pubkeyPEM,my_DHpubkeyLEN)){
+        EVP_PKEY_free(my_DHprivkey);
+        free(my_DH_pubkeyPEM);
         free(len);
+        free(nonce_c);
         free(username);
         disconnect(sd);
     }
     free(len);
+
+    /****************************************************************************
+    3) Ricevo la chiave pubblica del client e derivo la chiave di sessione Kab
+    ******************************************************************************/
     //ricevo la chiave pubblica del client
-    len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
-    if(!len){
+    uint32_t* client_DH_pubkeyLEN = recv_packet<uint32_t>(sd,sizeof(uint32_t));
+    if(!client_DH_pubkeyLEN){
         std::cout<<"Errore nella ricezione della dimensione del file PEM\n";
-        EVP_PKEY_free(my_privkey);
-        free(buffer);
+        EVP_PKEY_free(my_DHprivkey);
+        free(my_DH_pubkeyPEM);
         free(username);
+        free(nonce_c);
         disconnect(sd);
     }
-    *len = ntohl(*len);
+    *client_DH_pubkeyLEN = ntohl(*client_DH_pubkeyLEN);
     ///////////////////
     //CHECK OVERFLOW//
     /////////////////
-    free(buffer);
-    buffer = recv_packet<unsigned char>(sd,*len);
-    if(!buffer){
+    unsigned char* client_DH_pubkeyPEM = recv_packet<unsigned char>(sd,*client_DH_pubkeyLEN);
+    if(!client_DH_pubkeyPEM){
         std::cout<<"Chiave pubblica non ricevuta correttamente\n";
-        EVP_PKEY_free(my_privkey);
+        EVP_PKEY_free(my_DHprivkey);
+        free(my_DH_pubkeyPEM);
+        free(client_DH_pubkeyLEN);
+        free(nonce_c);
         free(username);
-        free(len);
         disconnect(sd);
     }
+
     //genera dinamicamente il nome del file!
-    EVP_PKEY* client_pubkey = DH_derive_pubkey(std::string("dh_clientpubkey.pem"),buffer,*len);
+    EVP_PKEY* client_pubkey = DH_derive_pubkey(std::string("dh_")+username+"pubkey.pem",client_DH_pubkeyPEM,*client_DH_pubkeyLEN);
     if(!client_pubkey){
         std::cout<<"Errore nella derivazione della chiave pubblica ricevuta dal client\n";
-        EVP_PKEY_free(my_privkey);
+        EVP_PKEY_free(my_DHprivkey);
+        free(my_DH_pubkeyPEM);
+        free(client_DH_pubkeyLEN);
+        free(client_DH_pubkeyPEM);
+        free(nonce_c);
         free(username);
-        free(len);
-        free(buffer);
         disconnect(sd);
     }
     
     size_t secret_len;
-    unsigned char* K_ab = DH_derive_session_secret(my_privkey,client_pubkey,&secret_len);
-    if(!K_ab){
+    unsigned char* secret = DH_derive_session_secret(my_DHprivkey,client_pubkey,&secret_len);
+    if(!secret){
         std::cout<<"Errore nella derivazione del segreto di sessione\n";
-        EVP_PKEY_free(my_privkey);
-        free(username);
-        free(len);
-        free(buffer);
+        EVP_PKEY_free(my_DHprivkey);
         EVP_PKEY_free(client_pubkey);
+        free(my_DH_pubkeyPEM);
+        free(client_DH_pubkeyLEN);
+        free(client_DH_pubkeyPEM);
+        free(nonce_c);
+        free(username);
         disconnect(sd);
     }
-    disconnect(sd);
-    /////////////////////////
-    // COMPUTE DIGEST OF K_ab
-    //////////////////////// 
+
+    EVP_PKEY_free(client_pubkey);
+    EVP_PKEY_free(my_DHprivkey);
+
+    
+    unsigned char* K_ab = session_key(EVP_sha256(),EVP_aes_128_gcm(),secret,secret_len,key_len);
+    if(!K_ab){
+        std::cout<<"Errore nel calcolo di K_ab\n";
+        free(my_DH_pubkeyPEM);
+        free(client_DH_pubkeyLEN);
+        free(client_DH_pubkeyPEM);
+        free(nonce_c);
+        free(secret);
+        free(username);
+        disconnect(sd);
+    }
+    free(secret);
+
+    //serve per la firma digitale
+    EVP_PKEY* my_privkeyRSA = read_RSA_privkey(std::string("ServerRSA_priv.pem"));
+    if(!my_privkeyRSA){
+        std::cout<<"Errore nella lettura della chiave privata RSA\n";
+        free(my_DH_pubkeyPEM);
+        free(client_DH_pubkeyLEN);
+        free(client_DH_pubkeyPEM);
+        free(nonce_c);
+        free(K_ab);
+        free(username);
+        disconnect(sd);
+    }
+
+    //genero la firma digitale
+    uint32_t* sign_len = (uint32_t*)malloc(sizeof(uint32_t));
+    if(!sign_len){
+        EVP_PKEY_free(my_privkeyRSA);
+        free(my_DH_pubkeyPEM);
+        free(client_DH_pubkeyLEN);
+        free(client_DH_pubkeyPEM);
+        free(nonce_c);
+        free(K_ab);
+        free(username);
+        disconnect(sd);
+    }
+    
+    unsigned char* signed_msg = (unsigned char*)malloc(NONCE_LEN + my_DHpubkeyLEN);
+    if(!signed_msg){
+        EVP_PKEY_free(my_privkeyRSA);
+        free(my_DH_pubkeyPEM);
+        free(client_DH_pubkeyLEN);
+        free(client_DH_pubkeyPEM);
+        free(nonce_c);
+        free(K_ab);
+        free(username);
+        free(sign_len);
+        disconnect(sd);
+    }
+    memcpy(signed_msg, nonce_c, NONCE_LEN);
+    memcpy(signed_msg+NONCE_LEN, my_DH_pubkeyPEM, my_DHpubkeyLEN);
+    free(my_DH_pubkeyPEM); 
+    free(nonce_c);
+    unsigned char* signature = compute_signature(EVP_sha256(), signed_msg, NONCE_LEN+my_DHpubkeyLEN, my_privkeyRSA,sign_len);
+    if(!signature){
+        EVP_PKEY_free(my_privkeyRSA);
+        free(client_DH_pubkeyLEN);
+        free(signed_msg);
+        free(username);
+        free(K_ab);
+        free(sign_len);
+        disconnect(sd);
+    }
+    free(signed_msg);
+    EVP_PKEY_free(my_privkeyRSA);
+
+    //invio la dimensione della firma
+    *sign_len = htonl(*sign_len);
+    if(!send_packet<uint32_t>(sd,sign_len,sizeof(uint32_t))){
+        free(client_DH_pubkeyLEN);
+        free(signature);
+        free(username);
+        free(K_ab);
+        free(sign_len);
+        disconnect(sd);
+    }
+    *sign_len = ntohl(*sign_len);
+    if(!send_packet<unsigned char>(sd,signature,*sign_len)){
+        free(client_DH_pubkeyLEN);
+        free(username);
+        free(signature);
+        free(K_ab);
+        free(sign_len);
+        disconnect(sd);
+    }
+    free(sign_len);
+    free(signature);
+    if(!send_file(sd,std::string("Server_certificate.pem"))){
+        free(client_DH_pubkeyLEN);
+        free(username);
+        free(K_ab);
+        disconnect(sd);
+    }
+    
+    //genero e invio il nonce_s
+    unsigned char* nonce_s = (unsigned char*)malloc(NONCE_LEN);
+    if(!nonce_s){
+        free(client_DH_pubkeyLEN);
+        free(K_ab);
+        free(username);
+        disconnect(sd);
+    }
+    nonce_s = nonce(nonce_s);
+    if(!send_packet<unsigned char>(sd,nonce_s,NONCE_LEN)){
+        free(client_DH_pubkeyLEN);
+        free(K_ab);
+        free(nonce_s);
+        free(username);
+        disconnect(sd);
+    }
+
+    //ricevo la firma dal client
+    uint32_t* client_signature_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
+    if(!client_signature_len){
+        free(client_DH_pubkeyLEN);
+        free(K_ab);
+        free(nonce_s);
+        free(username);
+        disconnect(sd);
+    }
+    *client_signature_len = ntohl(*client_signature_len);
+    unsigned char* client_signature = recv_packet<unsigned char>(sd,*client_signature_len);
+    if(!client_signature){
+        free(client_DH_pubkeyLEN);
+        free(K_ab);
+        free(nonce_s);
+        free(username);
+        free(client_signature_len);
+        disconnect(sd);
+    }
+
+    //creo il messaggio con cui controllare la firma
+    signed_msg = (unsigned char*)malloc(NONCE_LEN + *client_DH_pubkeyLEN);
+    if(!signed_msg){
+        free(client_DH_pubkeyLEN);
+        free(nonce_s);
+        free(K_ab);
+        free(username);
+        free(client_signature);
+        free(client_signature_len);
+        disconnect(sd);
+    }
+
+    memcpy(signed_msg,nonce_s,NONCE_LEN);
+    memcpy(signed_msg + NONCE_LEN, client_DH_pubkeyPEM, *client_DH_pubkeyLEN);
+    free(nonce_s);
+
+    //controllo la firma del client
+    if(!verify_signature(EVP_sha256(),client_signature, *client_signature_len, read_RSA_pubkey(std::string(username)),signed_msg, NONCE_LEN + *client_DH_pubkeyLEN)){
+        std::cout<<"FIRMA NON VALIDA\n";
+        free(username);
+        free(K_ab);
+        free(signed_msg);
+        free(client_signature);
+        free(client_signature_len);
+        disconnect(sd);
+    }
+    free(client_signature_len);
+    free(signed_msg);
+    free(client_signature);
+    if(remove((std::string("dh_myPUBKEY")+username+".pem").c_str())){
+        std::cout<<"Impossibile eliminare i file DH\n";
+        free(username);
+        free(K_ab);
+        disconnect(sd);
+    }
+    if(remove((std::string("dh_")+username+"pubkey.pem").c_str())){
+        std::cout<<"Impossibile eliminare i file DH\n";
+        free(username);
+        free(K_ab);
+        disconnect(sd);
+    }
+    return K_ab;
+}
+
+
+// routine eseguita dal thread
+void* manageConnection(void* s){
+
+    char* username;
+    int sd = *((int*)s);
+    unsigned int key_len;
+ 
+    unsigned char* K_ab = handshake(sd,&key_len,username);
+    disconnect(sd); 
 }
 
 int main(int n_args, char** args){
@@ -234,7 +463,12 @@ int main(int n_args, char** args){
                     scanf("%*[^\n]");
                     scanf("%*c");
                 }
-                std::cout<<"Letto da stdin: "<<user_input<<std::endl;
+                if(!strncmp(user_input,"shutdown",MAX_USER_INPUT)){
+                    ///////////////////////////////////
+                    //IMPLEMENTARE SHUTDOWN DEL SERVER
+                    /////////////////////////////////
+                }
+                
             }
             else if(i == listener){ /* richiesta di connessione al server */
                 socklen_t addrlen = sizeof(client);
