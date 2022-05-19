@@ -1,7 +1,9 @@
 #include "header/DH.h"
 
+
+
+//Meotod per creare la chiave privata
 EVP_PKEY* DH_privkey(){
-    
     EVP_PKEY* dh_params = EVP_PKEY_new();
     EVP_PKEY_set1_DH(dh_params, DH_get_2048_224());
     EVP_PKEY_CTX* dh_ctx = EVP_PKEY_CTX_new(dh_params,NULL);
@@ -13,13 +15,14 @@ EVP_PKEY* DH_privkey(){
     return my_privkey;
 }
 
-//ritorna il buffer contenente il file PEM della chiave pubblica
+//ritorna il buffer contenente il file PEM della chiave pubblica 
 unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub_key,uint32_t* file_len){
     FILE* pubkey_PEM = fopen(filename.c_str(),"w+");
     if(!pubkey_PEM){
         std::cout<<"Errore nella creazione del file PEM per la chiave pubblica\n";
         return NULL;
     }
+
     //ricavo la chiave pubblica dalla chiave privata DH
     int ret = PEM_write_PUBKEY(pubkey_PEM,my_privkey);
     if(ret != 1){
@@ -27,6 +30,7 @@ unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub
         fclose(pubkey_PEM);
         return NULL;
     }
+
     //leggo la dimensione del file PEM contenente la chiave pubblica
     fseek(pubkey_PEM,0,SEEK_END);
     *file_len = (uint32_t)ftell(pubkey_PEM); //CHECK OVERFLOW!
@@ -37,6 +41,7 @@ unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub
         fclose(pubkey_PEM);
         return NULL;
     }
+
     //leggo il file PEM con la chiave pubblica
     ret = fread(buffer,1,(size_t)*file_len,pubkey_PEM);
     if (ret < *file_len){
@@ -52,6 +57,8 @@ unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub
     return buffer;
 }
 
+
+//deriva la chiave pubblica dal file PEM 
 EVP_PKEY* DH_derive_pubkey(std::string filename,unsigned char* buffer,uint32_t file_len){
 
     FILE* pubkey_PEM = fopen(filename.c_str(),"w+");
@@ -59,6 +66,7 @@ EVP_PKEY* DH_derive_pubkey(std::string filename,unsigned char* buffer,uint32_t f
         std::cout<<"Errore nell'apertura del file PEM\n";
         return NULL;
     }
+    
     //scrivo la chiave pubblica ricevuta nel file PEM
     int ret = fwrite(buffer,1,file_len,pubkey_PEM);
     if(ret < file_len){
@@ -78,6 +86,8 @@ EVP_PKEY* DH_derive_pubkey(std::string filename,unsigned char* buffer,uint32_t f
     return received_pubkey;
 }
 
+
+//deriva il segreto di sessione 
 unsigned char* DH_derive_session_secret(EVP_PKEY* my_privkey, EVP_PKEY* received_pubkey,size_t* secret_len){
 
     EVP_PKEY_CTX* ctx_drv = EVP_PKEY_CTX_new(my_privkey,NULL);
@@ -97,6 +107,8 @@ unsigned char* DH_derive_session_secret(EVP_PKEY* my_privkey, EVP_PKEY* received
     return  secret;
 }
 
+
+//deriva la chiave di sessione 
 unsigned char* session_key(const EVP_MD* Hash_type,const EVP_CIPHER* Cipher_type, unsigned char* msg,size_t msg_len,unsigned int* digest_len){
     
     unsigned char* full_digest = (unsigned char*)malloc(EVP_MD_size(Hash_type));

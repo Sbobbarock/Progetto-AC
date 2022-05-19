@@ -1,5 +1,6 @@
 #include "header/signature.h"
 
+//metodo che firma il messaggio 
 unsigned char* compute_signature(const EVP_MD* Hash_type, unsigned char* msg, int msg_len, EVP_PKEY* key,uint32_t* signature_len){
 
     unsigned char* signature = (unsigned char*)malloc(EVP_PKEY_size(key));
@@ -14,6 +15,8 @@ unsigned char* compute_signature(const EVP_MD* Hash_type, unsigned char* msg, in
     return signature;
 }
 
+
+//metodo per verificare la firma del messaggio 
 bool verify_signature(const EVP_MD* Hash_type, unsigned char* signature, int sign_len, EVP_PKEY* key,unsigned char* msg,uint32_t msg_len){
 
     int ret;
