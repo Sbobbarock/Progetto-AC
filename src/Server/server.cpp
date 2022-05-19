@@ -12,6 +12,7 @@
 //// COMPILE WITH FLAG -lpthread ///
 ///////////////////////////////////
 
+
 /*Funzione per effettuare la disconnessione del client dal server. */
 void disconnect(int sd){
     close(sd);
@@ -19,8 +20,11 @@ void disconnect(int sd){
     pthread_exit(NULL);
 }
 
-/*Funzione che controlla la validita' di una stringa. 
-  Si controlla che la stringa non e' vuota e che i caratteri che ne fanno parte siano consentiti. */
+
+
+/*Funzione che controlla la validita' di una stringa: 
+  - la stringa non e' vuota? 
+  - i caratteri che ne fanno parte sono consentiti? */
 bool check_string(std::string s){
     static char ok_chars[] = "abcdefghijklmnopqrstuvwxyz"
                             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -32,7 +36,15 @@ bool check_string(std::string s){
     return true;
 }
 
-//restituisce la chiave di sessione K_ab
+
+
+/*Funzione che gestisce le azioni svolte lato server nel protocollo di handshake. 
+  1) Il server riceve username, di cui controlla la validita' e nonce_c
+  2) Il server genera la sua chiave privata e pubblica di DH
+  3) Il server riceve la chiave pubblica del client di DH e deriva la chiave di sessione Kab 
+  4) Il server invia il messaggio firmato con la sua chiave privata RSA, nonce_s e il certificato al client
+  5) Il server verifica la firma del client
+*/
 unsigned char* handshake(int sd,unsigned int* key_len,char* username){
 
     int ret = 0;
@@ -59,6 +71,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(username);
         disconnect(sd);
     }
+
     //check del nome utente dal file client_list.txt
     std::ifstream user_file;
     user_file.open("client_list.txt");
@@ -69,7 +82,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         }
     }
     bool login_status = true;
-    //nome utente non trovato
+
+    //se il nome utente non e' trovato il server invia un pacchetto al client 
     if(user_file.eof()){
         user_file.close();
         login_status = false;
@@ -90,6 +104,9 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
 
 
 
+
+
+
     /**************************************************************************
      2) Creazione della chiave privata e pubblica del server del protocollo DH. 
         - inizializzo DH param e chiave privata del server 
@@ -99,6 +116,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
 
     EVP_PKEY* my_DHprivkey = DH_privkey();
     EVP_PKEY* my_DHpubkey = EVP_PKEY_new();
+
+
     //ricavo e leggo file PEM con la mia chiave pubblica
     //genera dinamicamente il nome del file!
     len = (uint32_t*)malloc(sizeof(uint32_t));
@@ -110,6 +129,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(username);
         disconnect(sd);
     }
+
+    //leggo la chiave pubblica del server 
     unsigned char* my_DH_pubkeyPEM = DH_pubkey(std::string("dh_myPUBKEY")+username+".pem",my_DHprivkey,my_DHpubkey,len);
     if(!my_DH_pubkeyPEM){
         EVP_PKEY_free(my_DHprivkey);
@@ -119,9 +140,10 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(nonce_c);
         disconnect(sd);
     }
-    
     uint32_t my_DHpubkeyLEN = *len;
     EVP_PKEY_free(my_DHpubkey);
+
+
     //invio la dimensione del file PEM al client
     *len = htonl(*len);
     if(!send_packet<uint32_t>(sd,len,sizeof(uint32_t))){
@@ -133,7 +155,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
 
-    //invio il file PEM con la chiave pubblica al client
+
+    //invio il file PEM con la chiave pubblica del server al client
     if(!send_packet<unsigned char>(sd,my_DH_pubkeyPEM,my_DHpubkeyLEN)){
         EVP_PKEY_free(my_DHprivkey);
         free(my_DH_pubkeyPEM);
@@ -143,11 +166,25 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
     free(len);
+    /**************************************************************************************/
+
+
+
+
+
+
+
+
+
+
+
 
     /****************************************************************************
-    3) Ricevo la chiave pubblica del client e derivo la chiave di sessione Kab
+    3) Ricevo la chiave pubblica del client. 
+       Derivo la chiave di sessione Kab. 
     ******************************************************************************/
-    //ricevo la chiave pubblica del client
+
+    //ricevo la lunghezza della chiave pubblica del client
     uint32_t* client_DH_pubkeyLEN = recv_packet<uint32_t>(sd,sizeof(uint32_t));
     if(!client_DH_pubkeyLEN){
         std::cout<<"Errore nella ricezione della dimensione del file PEM\n";
@@ -161,6 +198,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     ///////////////////
     //CHECK OVERFLOW//
     /////////////////
+
+    //ricevo la chiave pubblica del client 
     unsigned char* client_DH_pubkeyPEM = recv_packet<unsigned char>(sd,*client_DH_pubkeyLEN);
     if(!client_DH_pubkeyPEM){
         std::cout<<"Chiave pubblica non ricevuta correttamente\n";
@@ -185,6 +224,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
     
+
+    //derivo il segreto di sessione 
     size_t secret_len;
     unsigned char* secret = DH_derive_session_secret(my_DHprivkey,client_pubkey,&secret_len);
     if(!secret){
@@ -203,6 +244,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     EVP_PKEY_free(my_DHprivkey);
 
     
+    //derivo la chiave di sessione Kab
     unsigned char* K_ab = session_key(EVP_sha256(),EVP_aes_128_gcm(),secret,secret_len,key_len);
     if(!K_ab){
         std::cout<<"Errore nel calcolo di K_ab\n";
@@ -215,8 +257,29 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
     free(secret);
+    /*****************************************************************************************************/
 
-    //serve per la firma digitale
+
+
+
+
+
+
+
+
+
+
+
+
+    /*********************************************************
+     5) Il server: 
+     - legge la sua chiave privata RSA 
+     - firma digitalmente il messaggio (nonce_c + server_DHpubkey) e lo invio al client 
+     - invio il certificato del server al client 
+     - invio il nonce_s al client 
+    **********************************************************/
+
+    //leggo la chiave privata RSA del server per la firma digitale
     EVP_PKEY* my_privkeyRSA = read_RSA_privkey(std::string("ServerRSA_priv.pem"));
     if(!my_privkeyRSA){
         std::cout<<"Errore nella lettura della chiave privata RSA\n";
@@ -229,7 +292,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
 
-    //genero la firma digitale
+    //valuto la lunghezza della firma digitale
     uint32_t* sign_len = (uint32_t*)malloc(sizeof(uint32_t));
     if(!sign_len){
         EVP_PKEY_free(my_privkeyRSA);
@@ -242,6 +305,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
     
+    //preparo il messaggio da firmare (nonce_c + server_DHpubkey)
     unsigned char* signed_msg = (unsigned char*)malloc(NONCE_LEN + my_DHpubkeyLEN);
     if(!signed_msg){
         EVP_PKEY_free(my_privkeyRSA);
@@ -258,6 +322,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     memcpy(signed_msg+NONCE_LEN, my_DH_pubkeyPEM, my_DHpubkeyLEN);
     free(my_DH_pubkeyPEM); 
     free(nonce_c);
+
+    //genero la firma digitale. Firmo con la chiave privata del server RSA! 
     unsigned char* signature = compute_signature(EVP_sha256(), signed_msg, NONCE_LEN+my_DHpubkeyLEN, my_privkeyRSA,sign_len);
     if(!signature){
         EVP_PKEY_free(my_privkeyRSA);
@@ -271,6 +337,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     free(signed_msg);
     EVP_PKEY_free(my_privkeyRSA);
 
+
     //invio la dimensione della firma
     *sign_len = htonl(*sign_len);
     if(!send_packet<uint32_t>(sd,sign_len,sizeof(uint32_t))){
@@ -282,6 +349,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
     *sign_len = ntohl(*sign_len);
+
+    //invio il messaggio firmato 
     if(!send_packet<unsigned char>(sd,signature,*sign_len)){
         free(client_DH_pubkeyLEN);
         free(username);
@@ -292,6 +361,9 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     }
     free(sign_len);
     free(signature);
+
+
+    //invio il certificato del server 
     if(!send_file(sd,std::string("Server_certificate.pem"))){
         free(client_DH_pubkeyLEN);
         free(username);
@@ -299,6 +371,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
     
+
     //genero e invio il nonce_s
     unsigned char* nonce_s = (unsigned char*)malloc(NONCE_LEN);
     if(!nonce_s){
@@ -315,6 +388,20 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(username);
         disconnect(sd);
     }
+    /******************************************************************************************/
+
+
+
+
+
+
+
+
+
+
+    /*********************************************************
+     5) Il server riceve e verifica la firma del client 
+    **********************************************************/
 
     //ricevo la firma dal client
     uint32_t* client_signature_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
@@ -336,6 +423,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
 
+
     //creo il messaggio con cui controllare la firma
     signed_msg = (unsigned char*)malloc(NONCE_LEN + *client_DH_pubkeyLEN);
     if(!signed_msg){
@@ -347,7 +435,6 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_signature_len);
         disconnect(sd);
     }
-
     memcpy(signed_msg,nonce_s,NONCE_LEN);
     memcpy(signed_msg + NONCE_LEN, client_DH_pubkeyPEM, *client_DH_pubkeyLEN);
     free(nonce_s);
@@ -365,6 +452,9 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     free(client_signature_len);
     free(signed_msg);
     free(client_signature);
+
+
+    //rimuovo le chiavi effimere
     if(remove((std::string("dh_myPUBKEY")+username+".pem").c_str())){
         std::cout<<"Impossibile eliminare i file DH\n";
         free(username);
@@ -378,6 +468,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         disconnect(sd);
     }
     return K_ab;
+
+
 }
 
 
