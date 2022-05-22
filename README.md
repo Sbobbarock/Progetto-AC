@@ -22,3 +22,47 @@ Progetto di Applied Cryptograhy - UniPI 2021/2022
 [activity]: https://github.com/TheAsel/Progetto-AC/pulse "Activity"
 
 [license-badge]: https://img.shields.io/github/license/TheAsel/Progetto-AC
+
+## Compilare ed eseguire il progetto
+
+1. Ambiente consigliato: Ubuntu 18.04
+
+2. Installa OpenSLL 1.1.1
+
+3. Scarica il progetto dalla repository GitHub:
+```bash
+git clone 'https://github.com/TheAsel/Progetto-AC'
+```
+
+4. Entra nella cartella del progetto:
+```bash
+cd Progetto-AC/
+```
+
+5. Compila il server:
+```bash
+cd src/Server/
+g++ server.cpp ../lib/signature.cpp ../lib/certificate.cpp ../lib/DH.cpp -o server -lcrypto -lpthread
+```
+
+6. Esegui il server, sostituendo a [port] la porta che si desidera utilizzare:
+```bash
+./server [port]
+```
+
+7. Compila il client:
+```bash
+cd ../Client/
+```
+Scegli che client registrato utilizzare, sostituendo il nome a \<username\>:
+```bash
+cd <username>/
+g++ ../client.cpp ../../lib/certificate.cpp ../../lib/signature.cpp ../../lib/DH.cpp -o client -lcrypto
+```
+
+8. Esegui il client, sostituendo a [port] la porta del server scelta precedentemente:
+```bash
+./client [port]
+```
+
+9. Have fun!
