@@ -31,7 +31,7 @@ EVP_PKEY* validate_certificate(X509_STORE* store, X509* cert){
     X509_STORE_CTX_init(ctx, store, cert, NULL);
     if(X509_verify_cert(ctx) == 1){
         X509_STORE_CTX_free(ctx);
-        if(std::string(X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0)).find("O=Server) == std::string::npos){
+        if(std::string(X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0)).find("O=Server") == std::string::npos){
             std::cout<<"Il certificato non appertiene al server\n";
             return NULL;
         }                                                                              

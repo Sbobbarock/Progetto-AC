@@ -482,7 +482,7 @@ void handshake(int sd){
 
 
     //leggo la chiave privata RSA del client 
-    EVP_PKEY* my_privkeyRSA = read_RSA_privkey(std::string("rsa_priv_client1.pem"));
+    EVP_PKEY* my_privkeyRSA = read_RSA_privkey(std::string("rsa_priv_client.pem"));
     if(!my_privkeyRSA){
         free(K_ab);
         free(sign_len);
