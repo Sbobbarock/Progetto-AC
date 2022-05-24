@@ -7,6 +7,7 @@
 #include "../lib/header/utility.h"
 #include "../lib/header/certificate.h"
 #include "../lib/header/signature.h"
+#include "../lib/header/cipher.h"
 
 /////////////////////////////////////
 //// COMPILE WITH FLAG -lpthread ///
@@ -19,23 +20,6 @@ void disconnect(int sd){
     std::cout<<"Client disconnected\n";
     pthread_exit(NULL);
 }
-
-
-
-/*Funzione che controlla la validita' di una stringa: 
-  - la stringa non e' vuota? 
-  - i caratteri che ne fanno parte sono consentiti? */
-bool check_string(std::string s){
-    static char ok_chars[] = "abcdefghijklmnopqrstuvwxyz"
-                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "1234567890"; 
-    if(s.find_first_not_of(ok_chars) != std::string::npos){
-        std::cout<<"Stringa non valida\n";
-        return false;
-    }
-    return true;
-}
-
 
 
 /*Funzione che gestisce le azioni svolte lato server nel protocollo di handshake. 
@@ -472,6 +456,55 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
 
 }
 
+void wait_request(int sd, uint64_t counter, unsigned char* key){
+
+    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!request){
+        return;
+    }
+
+    //controllo counter
+    uint64_t recevied_count;
+    memcpy(&recevied_count,request,sizeof(uint64_t));
+    if(recevied_count != counter){
+        std::cout<<"Counter non corretto\n";
+        std::cout<<recevied_count<<std::endl;
+        free(request);
+        return;
+    }
+    std::cout<<"COUNTER: "<<recevied_count<<std::endl;
+    counter++;
+
+
+    //controllo id
+    uint8_t recevied_id;
+    memcpy(&recevied_id,request + sizeof(uint64_t),sizeof(uint8_t));
+    std::cout<<"ID: "<<(uint32_t)recevied_id<<std::endl;
+
+    //controllo next_len
+    uint32_t received_next_len;
+    memcpy(&recevied_id,request + sizeof(uint64_t) +  sizeof(uint8_t), sizeof(uint32_t));
+    std::cout<<"NEXT_LEN: "<<received_next_len<<std::endl;
+
+    //ricavo il ciphertext
+    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
+    memcpy(ciphertext,request+ STD_AAD_LEN, SIZE_FILENAME);
+
+    unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
+    unsigned char* tag = (unsigned char*)malloc(16);
+    unsigned char* iv = (unsigned char*)malloc(12);
+
+    memcpy(iv,request + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint32_t), 12 );
+    memcpy(tag,request + SIZE_FILENAME + STD_AAD_LEN, 16);
+    memcpy(aad, request, STD_AAD_LEN);
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!decrypt_gcm(ciphertext, SIZE_FILENAME, aad, STD_AAD_LEN, tag, key, iv , plaintext)){
+        std::cout<<"ERRORE NELLA DECRYPT\n";
+        return;
+    }
+    std::cout<<(char*)plaintext<<std::endl;    
+
+}
 
 // routine eseguita dal thread
 void* manageConnection(void* s){
@@ -481,6 +514,11 @@ void* manageConnection(void* s){
     unsigned int key_len;
  
     unsigned char* K_ab = handshake(sd,&key_len,username);
+    while(true){
+        uint64_t counter = 0;
+        wait_request(sd,counter,K_ab);
+    }
+
     disconnect(sd); 
 }
 
