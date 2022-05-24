@@ -6,7 +6,9 @@
 #include "../lib/header/utility.h"
 #include "../lib/header/certificate.h"
 #include "../lib/header/signature.h"
+#include "../lib/header/cipher.h"
 
+#define SIZE_FILENAME 255
 
 /*Funzione che controlla la validita' di una stringa: 
   - la stringa non e' vuota? 
@@ -570,19 +572,53 @@ void upload(){}
 
 void download(int sd, unsigned char* key){
     std::string filename;
+    std::cin>>filename;
+    if(!check_string(filename))
+        return;
+
+    filename.resize(SIZE_FILENAME);
+
     u_int64_t counter = 0;
-    u_int8_t id = 2;
+    u_int8_t id = 3;
     unsigned char* iv = (unsigned char*)malloc(EVP_CIPHER_iv_length(EVP_aes_128_gcm()));
-    if(!iv) {
+    if(!iv){
+        std::cout<<"Errore nella malloc\n";
         return;
     }
-    std::cin>>filename;
-    if(!check_string(filename)) {
-      std::cout<<"We fra il file non va bene...";
-      return;
+    iv = nonce(iv,EVP_CIPHER_iv_length(EVP_aes_128_gcm()));
+
+    u_int32_t next_len = 0;
+
+    unsigned int aad_len = sizeof(u_int32_t)+sizeof(u_int8_t)+sizeof(u_int64_t) + EVP_CIPHER_iv_length(EVP_aes_128_gcm());
+    unsigned char* aad = (unsigned char*)malloc(aad_len);
+    if(!aad){
+        free(iv);
+        return;
+    }
+    memcpy(aad,&counter,sizeof(u_int64_t));
+    memcpy(aad + sizeof(u_int64_t),&id,sizeof(u_int8_t));
+    memcpy(aad + sizeof(u_int64_t) + sizeof(u_int8_t), &next_len, sizeof(u_int32_t));
+    memcpy(aad + sizeof(u_int64_t) + sizeof(u_int8_t) + sizeof(u_int32_t), &iv, EVP_CIPHER_iv_length(EVP_aes_128_gcm()));
+
+    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME + 16);
+    if(!ciphertext){
+        free(iv);
+        free(aad);
+        return;
+    }
+    
+    unsigned char* tag = (unsigned char*)malloc(16);
+    if(!tag){
+        free(iv);
+        free(aad);
+        free(ciphertext);
+        return;
     }
 
+    int ciphertext_len = encrypt((unsigned char*)filename.c_str(),SIZE_FILENAME,aad,aad_len,key,iv,ciphertext,tag);
+    std::cout<<ciphertext_len<<std::endl;
 }
+
 void rename(){}
 
 void delete_file(){}

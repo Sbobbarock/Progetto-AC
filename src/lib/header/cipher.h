@@ -1,0 +1,1 @@
+int encrypt(unsigned char *, int ,unsigned char *, int ,unsigned char *,unsigned char *,unsigned char *,unsigned char *);
