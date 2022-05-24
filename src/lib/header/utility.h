@@ -46,14 +46,17 @@ T* recv_packet(int sd,int len){
     return buffer;
 }
 
-unsigned char* nonce(unsigned char* buffer){
+unsigned char* nonce(unsigned char* buffer, unsigned int nonce_len){
     RAND_poll();
-    RAND_bytes(buffer,NONCE_LEN);
+    RAND_bytes(buffer,nonce_len);
     return buffer;
 }
 
 EVP_PKEY* read_RSA_privkey(std::string filename){
     FILE* file = fopen(filename.c_str(),"r");
+    if(!file) {
+        return NULL;
+    }
     EVP_PKEY* key = PEM_read_PrivateKey(file,NULL,NULL,NULL);
     fclose(file);
     return key;
@@ -62,6 +65,9 @@ EVP_PKEY* read_RSA_privkey(std::string filename){
 EVP_PKEY* read_RSA_pubkey(std::string username){
     username = "PubKeyList/" + username + ".pem";
     FILE* file = fopen(username.c_str(),"r");
+    if(!file) {
+        return NULL;
+    }
     EVP_PKEY* key = PEM_read_PUBKEY(file,NULL,NULL,NULL);
     fclose(file);
     return key;

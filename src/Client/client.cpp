@@ -23,7 +23,6 @@ bool check_string(std::string s){
 }
 
 
-
 /*Funzione che gestisce le azioni svolte lato client nel protocollo di handshake. 
   1) Il client invia al server la nonce e il suo id 
   2) Il client genera la sua chiave privata e pubblica di DH
@@ -33,7 +32,7 @@ bool check_string(std::string s){
   6) Il client invia al server il messaggio firmato (nonce_s + client_DHpubkey) 
   7) Sessione stabilita
 */
-void handshake(int sd){
+unsigned char* handshake(int sd){
     int ret;
     uint32_t* len;
     unsigned char* buffer;
@@ -49,7 +48,7 @@ void handshake(int sd){
         close(sd);
         exit(1);
     }
-    nonce_c = nonce(nonce_c);
+    nonce_c = nonce(nonce_c, NONCE_LEN);
 
     //chiedo username all'utente
     do{
@@ -541,12 +540,89 @@ void handshake(int sd){
         close(sd);
         exit(1);
     }
-
+    std::cout<<"Connessione con il server completata\n";
+    return K_ab;
     /*********************************************************
     7) la sessione con il server e' stata stabilita ed e' autentica e verificata! 
     ***********************************************************/ 
-    std::cout<<"Connessione con il server completata\n";
-    exit(0);
+}
+
+u_int32_t select_operation() {
+    std::cout<<"Operazioni disponibili\n";
+    std::cout<<"1: List\n";
+    std::cout<<"2: Upload\n";
+    std::cout<<"3: Download\n";
+    std::cout<<"4: Rename\n";
+    std::cout<<"5: Delete\n";
+    std::cout<<"6: Logout\n";
+    u_int32_t operation_id;
+    std::cin>>operation_id;
+    if(operation_id < 1 || operation_id > 6) {
+        std::cout<<"Operazione non valida\n";
+        return 0;
+    }
+    return operation_id;
+}
+
+void list(){}
+
+void upload(){}
+
+void download(int sd, unsigned char* key){
+    std::string filename;
+    u_int64_t counter = 0;
+    u_int8_t id = 2;
+    unsigned char* iv = (unsigned char*)malloc(EVP_CIPHER_iv_length(EVP_aes_128_gcm()));
+    if(!iv) {
+        return;
+    }
+    std::cin>>filename;
+    if(!check_string(filename)) {
+      std::cout<<"We fra il file non va bene...";
+      return;
+    }
+
+}
+void rename(){}
+
+void delete_file(){}
+
+void logout(){}
+
+void operation(int sd, unsigned char* key) {
+    u_int32_t op_id = select_operation();
+    while (op_id == 0) {
+        op_id = select_operation();
+    }
+    switch (op_id) 
+    {
+    case 1:
+        list();
+        break;
+
+    case 2:
+        upload();
+        break;
+
+    case 3:
+        download(sd, key);
+        break;
+
+    case 4:
+        rename();
+        break;
+
+    case 5:
+        delete_file();
+        break;
+
+    case 6:
+        logout();
+        break;
+    
+    default:
+        break;
+    }
 }
 
 int main(int n_args, char** args){
@@ -594,7 +670,9 @@ int main(int n_args, char** args){
     FD_SET(sd,&MASTER);
 
     max_fd = sd;
-    handshake(sd);
+    unsigned char* K_ab = handshake(sd);
+    
+    operation(sd, K_ab);
     while(1){
         READY = MASTER;
         select(max_fd+1, &READY, NULL,NULL,NULL);

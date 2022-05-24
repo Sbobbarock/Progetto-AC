@@ -380,7 +380,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(username);
         disconnect(sd);
     }
-    nonce_s = nonce(nonce_s);
+    nonce_s = nonce(nonce_s, NONCE_LEN);
     if(!send_packet<unsigned char>(sd,nonce_s,NONCE_LEN)){
         free(client_DH_pubkeyLEN);
         free(K_ab);
