@@ -12,6 +12,9 @@
 #define NONCE_LEN 16
 #define MAX_USERNAME 20
 #define MAX_CONNECTED 5
+#define SIZE_FILENAME 255
+#define STD_AAD_LEN 25
+#define REQ_LEN 296
 
 template<class T> 
 bool send_packet(int sd, T* msg, int len){
@@ -93,5 +96,14 @@ bool send_file(int sd,std::string file){
         return false;
     if(!send_packet<unsigned char>(sd,buffer,ntohl(file_len)))
         return false;
+    return true;
+}
+
+bool check_string(std::string str) {
+    if(str.empty()) return false;
+    static char ok_chars[] = "abcdefghijklmnopqrstuvwxyz"
+                             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                             "1234567890";
+    if(str.find_first_not_of(ok_chars) != std::string::npos) return false;
     return true;
 }
