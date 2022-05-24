@@ -3,9 +3,11 @@
 X509_STORE* build_store(std::string file_crl,std::string root_cert){
     X509_STORE* store = X509_STORE_new();
     FILE* f_crl = fopen(file_crl.c_str(),"r");
+    if(!f_crl) return NULL;
     X509_CRL* crl = PEM_read_X509_CRL(f_crl,NULL,NULL,NULL);
     fclose(f_crl);
     FILE* f_root = fopen(root_cert.c_str(),"r");
+    if(!f_root) return NULL;
     X509* root = PEM_read_X509(f_root,NULL,NULL,NULL);
 
     X509_STORE_add_cert(store,root);
@@ -17,6 +19,7 @@ X509_STORE* build_store(std::string file_crl,std::string root_cert){
 
 X509* read_certificate(std::string file,unsigned char* buffer,uint32_t len){
     FILE* f_cert = fopen(file.c_str(),"w+");
+    if(!f_cert) return NULL;
     fwrite(buffer,1,len,f_cert);
     rewind(f_cert);
     X509* cert = PEM_read_X509(f_cert,NULL,NULL,NULL);
