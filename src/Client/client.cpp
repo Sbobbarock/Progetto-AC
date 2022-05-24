@@ -8,22 +8,6 @@
 #include "../lib/header/signature.h"
 #include "../lib/header/cipher.h"
 
-#define SIZE_FILENAME 255
-
-/*Funzione che controlla la validita' di una stringa: 
-  - la stringa non e' vuota? 
-  - i caratteri che ne fanno parte sono consentiti? */
-bool check_string(std::string s){
-    static char ok_chars[] = "abcdefghijklmnopqrstuvwxyz"
-                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "1234567890"; 
-    if(s.find_first_not_of(ok_chars) != std::string::npos){
-        std::cout<<"Stringa non valida\n";
-        return false;
-    }
-    return true;
-}
-
 
 /*Funzione che gestisce le azioni svolte lato client nel protocollo di handshake. 
   1) Il client invia al server la nonce e il suo id 
@@ -549,7 +533,7 @@ unsigned char* handshake(int sd){
     ***********************************************************/ 
 }
 
-u_int32_t select_operation() {
+uint32_t select_operation() {
     std::cout<<"Operazioni disponibili\n";
     std::cout<<"1: List\n";
     std::cout<<"2: Upload\n";
@@ -571,6 +555,7 @@ void list(){}
 void upload(){}
 
 void download(int sd, unsigned char* key){
+    std::cout<<"Inserisci il nome del file da scaricare: ";
     std::string filename;
     std::cin>>filename;
     if(!check_string(filename))
@@ -578,35 +563,35 @@ void download(int sd, unsigned char* key){
 
     filename.resize(SIZE_FILENAME);
 
-    u_int64_t counter = 0;
-    u_int8_t id = 3;
-    unsigned char* iv = (unsigned char*)malloc(EVP_CIPHER_iv_length(EVP_aes_128_gcm()));
+    uint64_t counter = 0;
+    uint8_t id = 3;
+    uint32_t next_len = 0;
+    unsigned char* iv = (unsigned char*)malloc(12);
     if(!iv){
         std::cout<<"Errore nella malloc\n";
         return;
     }
-    iv = nonce(iv,EVP_CIPHER_iv_length(EVP_aes_128_gcm()));
+    iv = nonce(iv,12);
 
-    u_int32_t next_len = 0;
 
-    unsigned int aad_len = sizeof(u_int32_t)+sizeof(u_int8_t)+sizeof(u_int64_t) + EVP_CIPHER_iv_length(EVP_aes_128_gcm());
-    unsigned char* aad = (unsigned char*)malloc(aad_len);
+    //aad = counter || id || next_len || iv
+    unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
     if(!aad){
         free(iv);
         return;
     }
-    memcpy(aad,&counter,sizeof(u_int64_t));
-    memcpy(aad + sizeof(u_int64_t),&id,sizeof(u_int8_t));
-    memcpy(aad + sizeof(u_int64_t) + sizeof(u_int8_t), &next_len, sizeof(u_int32_t));
-    memcpy(aad + sizeof(u_int64_t) + sizeof(u_int8_t) + sizeof(u_int32_t), &iv, EVP_CIPHER_iv_length(EVP_aes_128_gcm()));
+    memcpy(aad,&counter,sizeof(uint64_t));
+    memcpy(aad + sizeof(uint64_t),&id,sizeof(uint8_t));
+    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t), &next_len, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint32_t), iv, 12);
 
-    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME + 16);
+    //non fa mai padding
+    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!ciphertext){
         free(iv);
         free(aad);
         return;
     }
-    
     unsigned char* tag = (unsigned char*)malloc(16);
     if(!tag){
         free(iv);
@@ -615,8 +600,28 @@ void download(int sd, unsigned char* key){
         return;
     }
 
-    int ciphertext_len = encrypt((unsigned char*)filename.c_str(),SIZE_FILENAME,aad,aad_len,key,iv,ciphertext,tag);
-    std::cout<<ciphertext_len<<std::endl;
+    if( !encrypt_gcm((unsigned char*)filename.c_str(),SIZE_FILENAME,aad,STD_AAD_LEN,key,iv,ciphertext,tag) ){
+        free(iv);
+        free(aad);
+        free(ciphertext);
+        free(tag);
+        return;
+    }
+    
+    unsigned char* request = (unsigned char*)malloc(REQ_LEN);
+    if(!request){
+        free(iv);
+        free(aad);
+        free(ciphertext);
+        free(tag);
+        return;
+    }
+
+    memcpy(request,aad,STD_AAD_LEN);
+    memcpy(request + STD_AAD_LEN, ciphertext, SIZE_FILENAME);
+    memcpy(request + STD_AAD_LEN + SIZE_FILENAME, tag, 16);
+    send_packet<unsigned char>(sd, request, REQ_LEN);
+    std::cout<<"INVIATO\n";
 }
 
 void rename(){}
@@ -626,7 +631,7 @@ void delete_file(){}
 void logout(){}
 
 void operation(int sd, unsigned char* key) {
-    u_int32_t op_id = select_operation();
+    uint32_t op_id = select_operation();
     while (op_id == 0) {
         op_id = select_operation();
     }
@@ -664,7 +669,7 @@ void operation(int sd, unsigned char* key) {
 int main(int n_args, char** args){
     int porta;
     int ret;
-    int sd; //sdket id
+    int sd; //socket id
     char user_input[MAX_USER_INPUT];
     socklen_t len;
     struct sockaddr_in server;
