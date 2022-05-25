@@ -554,7 +554,96 @@ void list(){}
 
 void upload(){}
 
-void download(int sd, unsigned char* key){
+unsigned char* build_aad(uint64_t counter, uint32_t next_len, uint8_t id, unsigned char* iv){
+
+    //aad = counter || id || next_len || iv
+    unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
+    if(!aad){
+        return NULL;
+    }
+    memcpy(aad,&counter,sizeof(uint64_t));
+    memcpy(aad + sizeof(uint64_t),&id,sizeof(uint8_t));
+    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t), &next_len, sizeof(uint32_t));
+    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint32_t), iv, 12);
+
+    return aad;
+}
+
+unsigned char* build_request(unsigned char* aad, unsigned char* ciphertext, unsigned char* tag){
+
+    unsigned char* request = (unsigned char*)malloc(REQ_LEN);
+        if(!request){
+            std::cout<<"Errore nella malloc\n";
+            return NULL;
+        }
+
+        memcpy(request,aad,STD_AAD_LEN);
+        memcpy(request + STD_AAD_LEN, ciphertext, SIZE_FILENAME);
+        memcpy(request + STD_AAD_LEN + SIZE_FILENAME, tag, 16);
+        return request;
+}
+
+void send_request(std::string filename, unsigned char* key,int sd, uint64_t counter, uint8_t id, uint32_t next_len){
+
+    unsigned char* iv = (unsigned char*)malloc(12);
+    if(!iv){
+        std::cout<<"Errore nella malloc\n";
+        return;
+    }
+    iv = nonce(iv,12);
+
+    unsigned char* aad = build_aad(counter,next_len,id,iv);
+    if(!aad){
+        std::cout<<"Errore nella generazione dell' aad del pacchetto\n";
+        free(iv);
+        return;
+    }
+    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!ciphertext){
+        std::cout<<"Errore nella malloc\n";
+        free(iv);
+        free(aad);
+        return;
+    }
+    unsigned char* tag = (unsigned char*)malloc(16);
+    if(!tag){
+        std::cout<<"Errore nella malloc\n";
+        free(iv);
+        free(aad);
+        free(ciphertext);
+        return;
+    }
+
+    if( !encrypt_gcm((unsigned char*)filename.c_str(),SIZE_FILENAME,aad,STD_AAD_LEN,key,iv,ciphertext,tag) ){
+        std::cout<<"Errore nella encrypt della richiesta\n";
+        free(iv);
+        free(aad);
+        free(ciphertext);
+        free(tag);
+        return;
+    }
+    unsigned char* request = build_request(aad,ciphertext,tag);
+    if(!request){
+        free(iv);
+        free(aad);
+        free(ciphertext);
+        free(tag);
+        return;
+    }
+    if(!send_packet<unsigned char>(sd, request, REQ_LEN)){
+        std::cout<<"Errore nell'invio della richiesta\n";
+        free(iv);
+        free(aad);
+        free(ciphertext);
+        free(tag);
+        return;
+    }
+    std::cout<<"INVIATO\n";
+}
+
+
+void download(int sd, unsigned char* key, uint64_t counter){
+
     std::cout<<"Inserisci il nome del file da scaricare: ";
     std::string filename;
     std::cin>>filename;
@@ -563,65 +652,9 @@ void download(int sd, unsigned char* key){
 
     filename.resize(SIZE_FILENAME);
 
-    uint64_t counter = 0;
     uint8_t id = 3;
     uint32_t next_len = 0;
-    unsigned char* iv = (unsigned char*)malloc(12);
-    if(!iv){
-        std::cout<<"Errore nella malloc\n";
-        return;
-    }
-    iv = nonce(iv,12);
-
-
-    //aad = counter || id || next_len || iv
-    unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
-    if(!aad){
-        free(iv);
-        return;
-    }
-    memcpy(aad,&counter,sizeof(uint64_t));
-    memcpy(aad + sizeof(uint64_t),&id,sizeof(uint8_t));
-    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t), &next_len, sizeof(uint32_t));
-    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint32_t), iv, 12);
-
-    //non fa mai padding
-    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
-    if(!ciphertext){
-        free(iv);
-        free(aad);
-        return;
-    }
-    unsigned char* tag = (unsigned char*)malloc(16);
-    if(!tag){
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        return;
-    }
-
-    if( !encrypt_gcm((unsigned char*)filename.c_str(),SIZE_FILENAME,aad,STD_AAD_LEN,key,iv,ciphertext,tag) ){
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        free(tag);
-        return;
-    }
-    
-    unsigned char* request = (unsigned char*)malloc(REQ_LEN);
-    if(!request){
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        free(tag);
-        return;
-    }
-
-    memcpy(request,aad,STD_AAD_LEN);
-    memcpy(request + STD_AAD_LEN, ciphertext, SIZE_FILENAME);
-    memcpy(request + STD_AAD_LEN + SIZE_FILENAME, tag, 16);
-    send_packet<unsigned char>(sd, request, REQ_LEN);
-    std::cout<<"INVIATO\n";
+    send_request(filename, key,sd,counter,id,next_len);
 }
 
 void rename(){}
@@ -632,6 +665,7 @@ void logout(){}
 
 void operation(int sd, unsigned char* key) {
     uint32_t op_id = select_operation();
+    uint64_t counter = 0;
     while (op_id == 0) {
         op_id = select_operation();
     }
@@ -646,7 +680,7 @@ void operation(int sd, unsigned char* key) {
         break;
 
     case 3:
-        download(sd, key);
+        download(sd, key,counter);
         break;
 
     case 4:
