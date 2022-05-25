@@ -456,54 +456,93 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
 
 }
 
-void wait_request(int sd, uint64_t counter, unsigned char* key){
+bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* next_len, uint8_t* id, unsigned char* plaintext,unsigned char* key){
 
-    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
-    if(!request){
-        return;
-    }
-
-    //controllo counter
-    uint64_t recevied_count;
-    memcpy(&recevied_count,request,sizeof(uint64_t));
-    if(recevied_count != counter){
-        std::cout<<"Counter non corretto\n";
-        std::cout<<recevied_count<<std::endl;
-        free(request);
-        return;
-    }
-    std::cout<<"COUNTER: "<<recevied_count<<std::endl;
-    counter++;
-
+    memcpy(counter,request,sizeof(uint64_t));
 
     //controllo id
-    uint8_t recevied_id;
-    memcpy(&recevied_id,request + sizeof(uint64_t),sizeof(uint8_t));
-    std::cout<<"ID: "<<(uint32_t)recevied_id<<std::endl;
+    memcpy(id,request + sizeof(uint64_t),sizeof(uint8_t));
 
     //controllo next_len
-    uint32_t received_next_len;
-    memcpy(&recevied_id,request + sizeof(uint64_t) +  sizeof(uint8_t), sizeof(uint32_t));
-    std::cout<<"NEXT_LEN: "<<received_next_len<<std::endl;
+    memcpy(next_len,request + sizeof(uint64_t) +  sizeof(uint8_t), sizeof(uint32_t));
 
     //ricavo il ciphertext
     unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!ciphertext)
+        return false;
     memcpy(ciphertext,request+ STD_AAD_LEN, SIZE_FILENAME);
 
     unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
+    if(!aad)
+        return false;
     unsigned char* tag = (unsigned char*)malloc(16);
+    if(!tag){
+        free(aad);
+        return false;
+    }
     unsigned char* iv = (unsigned char*)malloc(12);
+    if(!iv){
+        free(tag);
+        free(aad);
+        return false;
+    }
 
     memcpy(iv,request + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint32_t), 12 );
     memcpy(tag,request + SIZE_FILENAME + STD_AAD_LEN, 16);
     memcpy(aad, request, STD_AAD_LEN);
-    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+
     if(!decrypt_gcm(ciphertext, SIZE_FILENAME, aad, STD_AAD_LEN, tag, key, iv , plaintext)){
-        std::cout<<"ERRORE NELLA DECRYPT\n";
+        std::cout<<"Errore nella decfiratura della richiesta\n";
+        free(aad);
+        free(tag);
+        free(iv);
+        free(ciphertext);
+        return false;
+    }   
+
+    free(aad);
+    free(tag);
+    free(iv);
+    free(ciphertext); 
+    return true;
+}
+
+void wait_request(int sd, uint64_t counter, unsigned char* key){
+
+    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!request){
+        std::cout<<"Errore nella ricezione della richiesta\n";
+        disconnect(sd);
+    }
+
+    //parametri da leggere nel pacchetto di richiesta
+    uint64_t recevied_count;
+    uint32_t next_len;
+    uint8_t id;
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        std::cout<<"Errore nella malloc\n";
+        free(request);
         return;
     }
-    std::cout<<(char*)plaintext<<std::endl;    
-
+    if(!read_request_param(request,&recevied_count,&next_len,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(request);
+        free(plaintext);
+        return;
+    }
+    free(request);
+    std::cout<<"COUNTER: "<<counter<<" ID: "<<(uint32_t)id<<" NEXT_LEN: "<<next_len<<" MSG: "<<(char*)plaintext<<std::endl;
+    if(recevied_count != counter){
+        std::cout<<"Counter errato\n";
+        free(plaintext);
+        return;
+    }
+    counter++;
+    *(plaintext + SIZE_FILENAME -1 ) = '\0';
+    if(!check_string(std::string((char*)plaintext))){
+        return;
+    }
 }
 
 // routine eseguita dal thread
