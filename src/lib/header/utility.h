@@ -17,7 +17,7 @@
 #define REQ_LEN 296
 #define STD_AAD_LEN 25
 #define AAD_LEN 20
-#define MAX_PAYLOAD_SIZE (uint64_t)pow(2,10)
+#define MAX_PAYLOAD_SIZE (uint64_t)pow(2,8)
 
 template<class T> 
 bool send_packet(int sd, T* msg, int len){
@@ -27,7 +27,9 @@ bool send_packet(int sd, T* msg, int len){
         if(!ret)
             return false;
     }while(ret < len); 
+
     return true;
+    
 }
 
 template <class T>
@@ -205,13 +207,11 @@ void send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* 
         free(tag);
         return;
     }
-    std::cout<<"COUNTER: "<<*counter<<std::endl;
     (*counter)++;
     free(iv);
     free(aad);
     free(ciphertext);
     free(tag);
-    std::cout<<"INVIATO\n";
     return;
 }
 
@@ -269,7 +269,6 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
         std::cout<<"Counter errato\n";
         return false;
     }
-    std::cout<<"COUNTER: "<<*counter<<std::endl;
     (*counter)++;
     free(aad);
     free(tag);
@@ -355,14 +354,14 @@ void send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* 
         free(extended_aad);
         return ;
     }
-    std::cout<<"COUNTER: "<<*counter<<std::endl;
     (*counter)++;
     free(iv);
+    free(request);
+    free(ciphertext_len);
     free(aad);
     free(ciphertext);
     free(tag);
     free(extended_aad);
-    std::cout<<"INVIATO\n";
     return;
 }
 
