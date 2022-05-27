@@ -542,9 +542,16 @@ uint32_t select_operation() {
     std::cout<<"[5]: Delete\n";
     std::cout<<"[6]: Logout\n";
     std::cout<<"-------------------\n";
-    u_int32_t operation_id;
+    std::string buffer;
     std::cout<<"Seleziona l'operazione desiderata: ";
-    std::cin>>operation_id;
+    std::getline(std::cin, buffer);
+    std::cin>>buffer;
+    static char ok_chars[] = "123456";
+    if(buffer.find_first_not_of(ok_chars) != std::string::npos){
+        std::cout<<"Operazione non valida\n";
+        return 0;
+    }
+    uint32_t operation_id = std::stoi(buffer);
     if(operation_id < 1 || operation_id > 6) {
         std::cout<<"Operazione non valida\n";
         return 0;
@@ -555,7 +562,6 @@ uint32_t select_operation() {
 void list(){}
 
 void upload(){}
-
 
 void download(int sd, unsigned char* key, uint64_t* counter){
 
@@ -638,9 +644,7 @@ void operation(int sd, unsigned char* key) {
         return;
     *counter = 0;
     while(true) {
-        uint32_t op_id = select_operation();
-        
-
+        uint32_t op_id = 0;
         while (op_id == 0) {
             op_id = select_operation();
         }
