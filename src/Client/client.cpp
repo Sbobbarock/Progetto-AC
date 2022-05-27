@@ -23,7 +23,7 @@ unsigned char* handshake(int sd){
     uint32_t* len;
     unsigned char* buffer;
     unsigned char* nonce_c;
-    std::string username;
+    std::string* username = new std::string();
 
     /*********************************************************************
     1) Invio al server la nonce ed una stringa che identifichi il client
@@ -39,14 +39,14 @@ unsigned char* handshake(int sd){
     //chiedo username all'utente
     do{
         std::cout<<"Inserisci nome utente: ";
-        std::cin>>username;
-    }while(!check_string(username) || username.length() > MAX_USERNAME);
+        std::cin>>*username;
+    }while(!check_string(*username) || (*username).length() > MAX_USERNAME);
 
     //standardizzo la lunghezza del nome utente
-    username.resize(MAX_USERNAME);
+    (*username).resize(MAX_USERNAME);
 
     //invio nonce e nome utente
-    if(!send_packet<const char>(sd,username.c_str(),MAX_USERNAME)){
+    if(!send_packet<const char>(sd,(*username).c_str(),MAX_USERNAME)){
         std::cout<<"Errore nell'invio del nome utente\n";
         free(nonce_c);
         close(sd);
@@ -67,7 +67,7 @@ unsigned char* handshake(int sd){
         close(sd);
         exit(1);
     }
-    std::cout<<"BENVENUTO "<<username<<std::endl;
+    std::cout<<"BENVENUTO "<<*username<<std::endl;
     free(login_status);
     /*************************************************************************************/
 
@@ -554,95 +554,8 @@ void list(){}
 
 void upload(){}
 
-unsigned char* build_aad(uint64_t counter, uint32_t next_len, uint8_t id, unsigned char* iv){
 
-    //aad = counter || id || next_len || iv
-    unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
-    if(!aad){
-        return NULL;
-    }
-    memcpy(aad,&counter,sizeof(uint64_t));
-    memcpy(aad + sizeof(uint64_t),&id,sizeof(uint8_t));
-    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t), &next_len, sizeof(uint32_t));
-    memcpy(aad + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint32_t), iv, 12);
-
-    return aad;
-}
-
-unsigned char* build_request(unsigned char* aad, unsigned char* ciphertext, unsigned char* tag){
-
-    unsigned char* request = (unsigned char*)malloc(REQ_LEN);
-        if(!request){
-            std::cout<<"Errore nella malloc\n";
-            return NULL;
-        }
-
-        memcpy(request,aad,STD_AAD_LEN);
-        memcpy(request + STD_AAD_LEN, ciphertext, SIZE_FILENAME);
-        memcpy(request + STD_AAD_LEN + SIZE_FILENAME, tag, 16);
-        return request;
-}
-
-void send_request(std::string filename, unsigned char* key,int sd, uint64_t counter, uint8_t id, uint32_t next_len){
-
-    unsigned char* iv = (unsigned char*)malloc(12);
-    if(!iv){
-        std::cout<<"Errore nella malloc\n";
-        return;
-    }
-    iv = nonce(iv,12);
-
-    unsigned char* aad = build_aad(counter,next_len,id,iv);
-    if(!aad){
-        std::cout<<"Errore nella generazione dell' aad del pacchetto\n";
-        free(iv);
-        return;
-    }
-    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
-    if(!ciphertext){
-        std::cout<<"Errore nella malloc\n";
-        free(iv);
-        free(aad);
-        return;
-    }
-    unsigned char* tag = (unsigned char*)malloc(16);
-    if(!tag){
-        std::cout<<"Errore nella malloc\n";
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        return;
-    }
-
-    if( !encrypt_gcm((unsigned char*)filename.c_str(),SIZE_FILENAME,aad,STD_AAD_LEN,key,iv,ciphertext,tag) ){
-        std::cout<<"Errore nella encrypt della richiesta\n";
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        free(tag);
-        return;
-    }
-    unsigned char* request = build_request(aad,ciphertext,tag);
-    if(!request){
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        free(tag);
-        return;
-    }
-    if(!send_packet<unsigned char>(sd, request, REQ_LEN)){
-        std::cout<<"Errore nell'invio della richiesta\n";
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        free(tag);
-        return;
-    }
-    std::cout<<"INVIATO\n";
-}
-
-
-void download(int sd, unsigned char* key, uint64_t counter){
+void download(int sd, unsigned char* key, uint64_t* counter){
 
     std::cout<<"Inserisci il nome del file da scaricare: ";
     std::string filename;
@@ -653,8 +566,54 @@ void download(int sd, unsigned char* key, uint64_t counter){
     filename.resize(SIZE_FILENAME);
 
     uint8_t id = 3;
-    uint32_t next_len = 0;
-    send_request(filename, key,sd,counter,id,next_len);
+    uint32_t num_packets = 0;
+    send_std_packet(filename, key,sd,counter,id,num_packets);
+    unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!response){
+        return;
+    }
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        std::cout<<"Errore nella malloc\n";
+        free(response);
+        return;
+    }
+    if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(response);
+        free(plaintext);
+        return;
+    }
+    plaintext[SIZE_FILENAME - 1] = '\0';
+    free(response);
+
+    if( id == 8 && num_packets <= 4096){ //ricevuto errore
+        std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        return;
+    }
+    else if(id != 0 || num_packets > 4096){
+        std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        return;
+    }
+    //std::cout<<"COUNTER: "<<*counter<<" ID: "<<(uint32_t)id<<" NUM_PACKETS: "<<num_packets<<" MSG: "<<(char*)plaintext<<std::endl;
+    free(plaintext);
+    FILE* file = fopen(filename.c_str(),"w+");
+    uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
+
+    for(uint32_t i = 0; i < num_packets; i++){
+        plaintext = receive_data_packet(sd,counter,key,plaintext_len);
+        if(!plaintext){
+            std::cout<<"Errore nella ricezione del pacchetto\n";
+            fclose(file);
+            remove(filename.c_str());
+            return;
+        }
+        fwrite(plaintext,1,*plaintext_len,file);
+        std::cout<<"RICEVO IL PACCHETTO NUMERO: "<<i<<std::endl;
+        std::cout<<"Il counter è: "<<*counter<<std::endl;
+        free(plaintext);
+    }
+    fclose(file);
 }
 
 void rename(){}
@@ -665,7 +624,11 @@ void logout(){}
 
 void operation(int sd, unsigned char* key) {
     uint32_t op_id = select_operation();
-    uint64_t counter = 0;
+    uint64_t* counter = (uint64_t*)malloc(sizeof(uint64_t));
+    if(!counter)
+        return;
+    *counter = 0;
+
     while (op_id == 0) {
         op_id = select_operation();
     }
@@ -704,13 +667,8 @@ int main(int n_args, char** args){
     int porta;
     int ret;
     int sd; //socket id
-    char user_input[MAX_USER_INPUT];
     socklen_t len;
     struct sockaddr_in server;
-    fd_set MASTER, READY;
-    int max_fd;
-    int dim_msg;
-    char* buffer;
 
     if(n_args != 2){
         std::cout<<"Numero di porta non inserito\n";
@@ -739,86 +697,10 @@ int main(int n_args, char** args){
         perror("Error:");
         exit(1);
     }
-    FD_ZERO(&MASTER);
-    FD_ZERO(&READY);
-    FD_SET(STDIN_FILENO,&MASTER);
-    FD_SET(sd,&MASTER);
 
-    max_fd = sd;
     unsigned char* K_ab = handshake(sd);
     
     operation(sd, K_ab);
-    while(1){
-        READY = MASTER;
-        select(max_fd+1, &READY, NULL,NULL,NULL);
-        for(int i=0; i <=max_fd; i++){
-            if(!FD_ISSET(i,&READY))
-                continue;
-            else if(i == STDIN_FILENO){
-                if(!fgets(user_input,MAX_USER_INPUT,stdin)){
-                    std::cerr<<"Error in reading user input\n";
-                    exit(1);
-                }
-                char* p = strchr(user_input,'\n');
-                if(p)
-                    *p = '\0';
-                else{
-                    scanf("%*[^\n]");
-                    scanf("%*c");
-                }
-                std::cout<<"INVIO: "<<user_input<<std::endl;
-                
-                //esempio di come inviare un intero sul network
-                dim_msg = strlen(user_input)+1;
-                dim_msg = htonl(dim_msg); //standardizza la endianess 
-                ret = send(sd,&dim_msg,sizeof(uint32_t),0); 
-                while(ret < sizeof(uint32_t)) //gestione errore se non invia tutti i byte
-                    ret += send(sd,&dim_msg,sizeof(uint32_t),0);
-
-                //dopo aver inviato la dimensione del pacchetto, invio il pacchetto vero e propio
-                dim_msg = ntohl(dim_msg); //ripristina la endianess usata del sistema
-                ret = send(sd,user_input,dim_msg,0);
-                while(ret < dim_msg)
-                    ret += send(sd,user_input,dim_msg,0);
-            }
-
-            else if(i == sd){
-                //ricevo prima la dimensione del pacchetto
-                ret = recv(i,&dim_msg,sizeof(uint32_t),0);
-                if(!ret){
-                    close(i);
-                    FD_CLR(i,&MASTER);
-                    std::cout<<"Server disconnected\n";
-                    exit(0); 
-                }
-                while(ret < sizeof(uint32_t))
-                    ret += recv(i,&dim_msg,sizeof(uint32_t),0);
-
-                dim_msg = ntohl(dim_msg);
-                buffer = (char*) malloc(dim_msg);
-                if(!buffer){
-                    std::cerr<<"Error in allocation of buffer for received packet\n";
-                    close(i);
-                    exit(1);
-                }
-
-                ret = recv(i,buffer,dim_msg,0);
-                if(!ret){
-                    close(i);
-                    FD_CLR(i,&MASTER);
-                    free(buffer);
-                    std::cout<<"Server disconnected\n";
-                    exit(0); 
-                }
-                while(ret < dim_msg)
-                    ret += recv(i,buffer,dim_msg,0);
-
-                buffer[dim_msg-1] = '\0';
-                std::cout<<"Ricevuto: "<<buffer<<std::endl; 
-                free(buffer); 
-            }
-        }
-    }
-    free(buffer);
     close(sd);
+    return 0;
 }
