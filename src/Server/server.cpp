@@ -521,51 +521,54 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             std::cout<<"INVIO IL PACCHETTO NUMERO: "<<i<<std::endl;
             std::cout<<"Il counter è: "<<*counter<<std::endl;
             free(data);
-            if(i % 50 == 0) usleep(100);
+            //if(i % 50 == 0) usleep(100);
         }
+        return;
     }
 }
 
 void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* username){
+    while(true) {
+        unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+        if(!request){
+            std::cout<<"Errore nella ricezione della richiesta\n";
+            disconnect(sd);
+        }
 
-    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
-    if(!request){
-        std::cout<<"Errore nella ricezione della richiesta\n";
-        disconnect(sd);
-    }
-
-    //parametri da leggere nel pacchetto di richiesta
-    uint32_t num_packets;
-    uint8_t id;
-    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
-    if(!plaintext){
-        std::cout<<"Errore nella malloc\n";
+        //parametri da leggere nel pacchetto di richiesta
+        uint32_t num_packets;
+        uint8_t id;
+        unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+        if(!plaintext){
+            std::cout<<"Errore nella malloc\n";
+            free(request);
+            return;
+        }
+        if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
+            std::cout<<"Impossibile leggere correttamente la richiesta\n";
+            free(request);
+            free(plaintext);
+            return;
+        }
         free(request);
-        return;
-    }
-    if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
-        std::cout<<"Impossibile leggere correttamente la richiesta\n";
-        free(request);
-        free(plaintext);
-        return;
-    }
-    free(request);
 
-    switch(id){
-        case 1: //list();
-            break;
-        case 2: //upload(); 
-            break;
-        case 3: download(plaintext,key,sd,counter,username); 
-            break;
-        case 4: //rename(); 
-            break;
-        case 5: //delete_file(); 
-            break;
-        case 6: //logout(); 
-            break;
-        default: 
-            break;
+        switch(id){
+            case 1: //list();
+                break;
+            case 2: //upload(); 
+                break;
+            case 3: download(plaintext,key,sd,counter,username); 
+            std::cout<<"Download completato!\n";
+                break;
+            case 4: //rename(); 
+                break;
+            case 5: //delete_file(); 
+                break;
+            case 6: //logout(); 
+                break;
+            default: 
+                break;
+        }
     }
 }
 

@@ -67,7 +67,7 @@ unsigned char* handshake(int sd){
         close(sd);
         exit(1);
     }
-    std::cout<<"BENVENUTO "<<*username<<std::endl;
+    std::cout<<"Welcome "<<*username<<std::endl;
     free(login_status);
     /*************************************************************************************/
 
@@ -534,14 +534,16 @@ unsigned char* handshake(int sd){
 }
 
 uint32_t select_operation() {
-    std::cout<<"Operazioni disponibili\n";
-    std::cout<<"1: List\n";
-    std::cout<<"2: Upload\n";
-    std::cout<<"3: Download\n";
-    std::cout<<"4: Rename\n";
-    std::cout<<"5: Delete\n";
-    std::cout<<"6: Logout\n";
+    std::cout<<"Operazioni disponibili:\n";
+    std::cout<<"[1]: List\n";
+    std::cout<<"[2]: Upload\n";
+    std::cout<<"[3]: Download\n";
+    std::cout<<"[4]: Rename\n";
+    std::cout<<"[5]: Delete\n";
+    std::cout<<"[6]: Logout\n";
+    std::cout<<"-------------------\n";
     u_int32_t operation_id;
+    std::cout<<"Seleziona l'operazione desiderata: ";
     std::cin>>operation_id;
     if(operation_id < 1 || operation_id > 6) {
         std::cout<<"Operazione non valida\n";
@@ -614,6 +616,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
         free(plaintext);
     }
     fclose(file);
+    return;
 }
 
 void rename(){}
@@ -623,43 +626,48 @@ void delete_file(){}
 void logout(){}
 
 void operation(int sd, unsigned char* key) {
-    uint32_t op_id = select_operation();
     uint64_t* counter = (uint64_t*)malloc(sizeof(uint64_t));
     if(!counter)
         return;
     *counter = 0;
+    while(true) {
+        uint32_t op_id = select_operation();
+        
 
-    while (op_id == 0) {
-        op_id = select_operation();
-    }
-    switch (op_id) 
-    {
-    case 1:
-        list();
-        break;
+        while (op_id == 0) {
+            op_id = select_operation();
+        }
+        switch (op_id) 
+        {
+        case 1:
+            list();
+            break;
 
-    case 2:
-        upload();
-        break;
+        case 2:
+            upload();
+            break;
 
-    case 3:
-        download(sd, key,counter);
-        break;
+        case 3:
+            download(sd, key,counter);
+            std::cout<<"Download completato\n";
+            std::cout<<"-------------------\n";
+            break;
 
-    case 4:
-        rename();
-        break;
+        case 4:
+            rename();
+            break;
 
-    case 5:
-        delete_file();
-        break;
+        case 5:
+            delete_file();
+            break;
 
-    case 6:
-        logout();
-        break;
-    
-    default:
-        break;
+        case 6:
+            logout();
+            break;
+        
+        default:
+            break;
+        }
     }
 }
 
