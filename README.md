@@ -42,7 +42,7 @@ cd Progetto-AC/
 5. Compila il server:
 ```bash
 cd src/Server/
-g++ server.cpp ../lib/signature.cpp ../lib/certificate.cpp ../lib/DH.cpp -o server -lcrypto -lpthread
+g++ server.cpp ../lib/signature.cpp ../lib/certificate.cpp ../lib/DH.cpp ../lib/cipher.cpp -o server -lcrypto -lpthread
 ```
 
 6. Esegui il server, sostituendo a [port] la porta che si desidera utilizzare:
@@ -57,7 +57,7 @@ cd ../Client/
 Scegli che client registrato utilizzare, sostituendo il nome a \<username\>:
 ```bash
 cd <username>/
-g++ ../client.cpp ../../lib/certificate.cpp ../../lib/signature.cpp ../../lib/DH.cpp -o client -lcrypto
+g++ ../client.cpp ../../lib/certificate.cpp ../../lib/signature.cpp ../../lib/DH.cpp ../../lib/cipher.cpp -o client -lcrypto
 ```
 
 8. Esegui il client, sostituendo a [port] la porta del server scelta precedentemente:
