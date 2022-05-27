@@ -589,11 +589,11 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     plaintext[SIZE_FILENAME - 1] = '\0';
     free(response);
 
-    if( id == 8 && num_packets <= 4096){ //ricevuto errore
+    if( id == 8){ //ricevuto errore
         std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
         return;
     }
-    else if(id != 0 || num_packets > 4096){
+    else if(id != 0){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
         return;
     }
@@ -610,12 +610,19 @@ void download(int sd, unsigned char* key, uint64_t* counter){
             remove(filename.c_str());
             return;
         }
-        fwrite(plaintext,1,*plaintext_len,file);
-        std::cout<<"RICEVO IL PACCHETTO NUMERO: "<<i<<std::endl;
-        std::cout<<"Il counter è: "<<*counter<<std::endl;
+        uint32_t ret;
+        ret = fwrite(plaintext,1,*plaintext_len,file);
+        std::cout<<(float)i*100/num_packets<<std::endl;
         free(plaintext);
     }
     fclose(file);
+    
+    //invio messaggio DONE
+    filename = std::string("");
+    filename.resize(SIZE_FILENAME);
+    id = 7; //ID di done
+    num_packets = 0;
+    send_std_packet(filename, key,sd,counter,id,num_packets);
     return;
 }
 
