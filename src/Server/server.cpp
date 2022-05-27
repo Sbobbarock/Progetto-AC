@@ -9,6 +9,7 @@
 #include "../lib/header/signature.h"
 #include "../lib/header/cipher.h"
 
+
 /////////////////////////////////////
 //// COMPILE WITH FLAG -lpthread ///
 ///////////////////////////////////
@@ -518,11 +519,40 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
                 data_len = MAX_PAYLOAD_SIZE;
             }
             send_data_packet(data,key,sd,counter,data_len);
-            std::cout<<"INVIO IL PACCHETTO NUMERO: "<<i<<std::endl;
-            std::cout<<"Il counter è: "<<*counter<<std::endl;
+            std::cout<<float(i*100/num_packets)<<std::endl;
             free(data);
-            //if(i % 50 == 0) usleep(100);
+            sleep(0);
         }
+
+        unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+        if(!request){
+            std::cout<<"Errore nella ricezione della richiesta\n";
+            disconnect(sd);
+        }
+
+        //dovrei ricevere pacchetto richiesta DONE
+        //parametri da leggere nel pacchetto di richiesta
+        uint32_t num_packets;
+        uint8_t id;
+        unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
+        if(!req_payload){
+            std::cout<<"Errore nella malloc\n";
+            free(request);
+            return;
+        }
+        if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
+            std::cout<<"Impossibile leggere correttamente la richiesta\n";
+            free(request);
+            free(plaintext);
+            return;
+        }
+        free(request);
+        if(id != 7){
+            //Implementa invio errore da client
+            std::cout<<"Errore: il client non ha ricevuto il file\n";
+            return;
+        }
+  
         return;
     }
 }
