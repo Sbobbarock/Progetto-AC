@@ -29,30 +29,30 @@ void disconnect(int sd){
   4) Il server invia il messaggio firmato con la sua chiave privata RSA, nonce_s e il certificato al client
   5) Il server verifica la firma del client
 */
-unsigned char* handshake(int sd,unsigned int* key_len,char* username){
+unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
 
     int ret = 0;
     std::string client_check;
     unsigned char* nonce_c;
     uint32_t* len;
  
-    username = recv_packet<char>(sd,MAX_USERNAME);
-    if(!username)
+    char* tmp = recv_packet<char>(sd,MAX_USERNAME);
+    if(!tmp)
         disconnect(sd);
     
     /******************************************************************************
      1) Il server riceve nonce e username del client e ne controlla la validita'.
      ********************************************************************************/
-    username[MAX_USERNAME-1] = '\0';
-    if(!check_string(std::string(username))){
+    tmp[MAX_USERNAME-1] = '\0';
+    *username = std::string(tmp);
+    free(tmp);
+    if(!check_string( *(username) ) ){
         std::cout<<"Formato nome utente non valido\n";
-        free(username);
         disconnect(sd);
     }
     nonce_c = recv_packet<unsigned char>(sd,NONCE_LEN);
     if(!nonce_c){
         std::cout<<"Errore nella ricezione del nonce\n";
-        free(username);
         disconnect(sd);
     }
 
@@ -60,8 +60,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     std::ifstream user_file;
     user_file.open("client_list.txt");
     while(std::getline(user_file,client_check)){
-        if(!client_check.compare(username)){
-            std::cout<<"Connessione con: "<<username<<std::endl;
+        if(!client_check.compare(*username)){
+            std::cout<<"Connessione con: "<<*username<<std::endl;
             break;     
         }
     }
@@ -73,14 +73,14 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         login_status = false;
         std::cout<<"Nome utente non valido\n";
         send_packet<bool>(sd,&login_status,sizeof(bool));
-        free(username);
+        
         free(nonce_c);
         disconnect(sd);
     }
     user_file.close();
     
     if(!send_packet<bool>(sd,&login_status,sizeof(bool))){
-        free(username);
+        
         free(nonce_c);
         disconnect(sd);
     }
@@ -110,15 +110,15 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         EVP_PKEY_free(my_DHprivkey);
         free(nonce_c);
         EVP_PKEY_free(my_DHpubkey);
-        free(username);
+        
         disconnect(sd);
     }
 
     //leggo la chiave pubblica del server 
-    unsigned char* my_DH_pubkeyPEM = DH_pubkey(std::string("dh_myPUBKEY")+username+".pem",my_DHprivkey,my_DHpubkey,len);
+    unsigned char* my_DH_pubkeyPEM = DH_pubkey(std::string("dh_myPUBKEY")+(*username)+".pem",my_DHprivkey,my_DHpubkey,len);
     if(!my_DH_pubkeyPEM){
         EVP_PKEY_free(my_DHprivkey);
-        free(username);
+        
         free(len);
         EVP_PKEY_free(my_DHpubkey);
         free(nonce_c);
@@ -135,7 +135,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(len);
         free(my_DH_pubkeyPEM);
         free(nonce_c);
-        free(username);
+        
         disconnect(sd);
     }
 
@@ -146,7 +146,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(my_DH_pubkeyPEM);
         free(len);
         free(nonce_c);
-        free(username);
+        
         disconnect(sd);
     }
     free(len);
@@ -174,7 +174,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         std::cout<<"Errore nella ricezione della dimensione del file PEM\n";
         EVP_PKEY_free(my_DHprivkey);
         free(my_DH_pubkeyPEM);
-        free(username);
+        
         free(nonce_c);
         disconnect(sd);
     }
@@ -191,12 +191,12 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(my_DH_pubkeyPEM);
         free(client_DH_pubkeyLEN);
         free(nonce_c);
-        free(username);
+        
         disconnect(sd);
     }
 
     //genera dinamicamente il nome del file!
-    EVP_PKEY* client_pubkey = DH_derive_pubkey(std::string("dh_")+username+"pubkey.pem",client_DH_pubkeyPEM,*client_DH_pubkeyLEN);
+    EVP_PKEY* client_pubkey = DH_derive_pubkey(std::string("dh_")+(*username)+"pubkey.pem",client_DH_pubkeyPEM,*client_DH_pubkeyLEN);
     if(!client_pubkey){
         std::cout<<"Errore nella derivazione della chiave pubblica ricevuta dal client\n";
         EVP_PKEY_free(my_DHprivkey);
@@ -204,7 +204,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyLEN);
         free(client_DH_pubkeyPEM);
         free(nonce_c);
-        free(username);
+        
         disconnect(sd);
     }
     
@@ -220,7 +220,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyLEN);
         free(client_DH_pubkeyPEM);
         free(nonce_c);
-        free(username);
+        
         disconnect(sd);
     }
 
@@ -237,7 +237,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyPEM);
         free(nonce_c);
         free(secret);
-        free(username);
+        
         disconnect(sd);
     }
     free(secret);
@@ -272,7 +272,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyPEM);
         free(nonce_c);
         free(K_ab);
-        free(username);
+        
         disconnect(sd);
     }
 
@@ -285,7 +285,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyPEM);
         free(nonce_c);
         free(K_ab);
-        free(username);
+        
         disconnect(sd);
     }
     
@@ -298,7 +298,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyPEM);
         free(nonce_c);
         free(K_ab);
-        free(username);
+        
         free(sign_len);
         disconnect(sd);
     }
@@ -313,7 +313,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         EVP_PKEY_free(my_privkeyRSA);
         free(client_DH_pubkeyLEN);
         free(signed_msg);
-        free(username);
+        
         free(K_ab);
         free(sign_len);
         disconnect(sd);
@@ -327,7 +327,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     if(!send_packet<uint32_t>(sd,sign_len,sizeof(uint32_t))){
         free(client_DH_pubkeyLEN);
         free(signature);
-        free(username);
+        
         free(K_ab);
         free(sign_len);
         disconnect(sd);
@@ -337,7 +337,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     //invio il messaggio firmato 
     if(!send_packet<unsigned char>(sd,signature,*sign_len)){
         free(client_DH_pubkeyLEN);
-        free(username);
+        
         free(signature);
         free(K_ab);
         free(sign_len);
@@ -350,7 +350,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     //invio il certificato del server 
     if(!send_file(sd,std::string("Server_certificate.pem"))){
         free(client_DH_pubkeyLEN);
-        free(username);
+        
         free(K_ab);
         disconnect(sd);
     }
@@ -361,7 +361,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     if(!nonce_s){
         free(client_DH_pubkeyLEN);
         free(K_ab);
-        free(username);
+        
         disconnect(sd);
     }
     nonce_s = nonce(nonce_s, NONCE_LEN);
@@ -369,7 +369,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyLEN);
         free(K_ab);
         free(nonce_s);
-        free(username);
+        
         disconnect(sd);
     }
     /******************************************************************************************/
@@ -393,7 +393,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyLEN);
         free(K_ab);
         free(nonce_s);
-        free(username);
+        
         disconnect(sd);
     }
     *client_signature_len = ntohl(*client_signature_len);
@@ -402,7 +402,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyLEN);
         free(K_ab);
         free(nonce_s);
-        free(username);
+        
         free(client_signature_len);
         disconnect(sd);
     }
@@ -414,7 +414,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
         free(client_DH_pubkeyLEN);
         free(nonce_s);
         free(K_ab);
-        free(username);
+        
         free(client_signature);
         free(client_signature_len);
         disconnect(sd);
@@ -424,9 +424,9 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
     free(nonce_s);
 
     //controllo la firma del client
-    if(!verify_signature(EVP_sha256(),client_signature, *client_signature_len, read_RSA_pubkey(std::string(username)),signed_msg, NONCE_LEN + *client_DH_pubkeyLEN)){
+    if( !verify_signature( EVP_sha256(),client_signature, *client_signature_len, read_RSA_pubkey(*username),signed_msg, NONCE_LEN + *client_DH_pubkeyLEN) ){
         std::cout<<"FIRMA NON VALIDA\n";
-        free(username);
+        
         free(K_ab);
         free(signed_msg);
         free(client_signature);
@@ -439,75 +439,94 @@ unsigned char* handshake(int sd,unsigned int* key_len,char* username){
 
 
     //rimuovo le chiavi effimere
-    if(remove((std::string("dh_myPUBKEY")+username+".pem").c_str())){
+    if(remove((std::string("dh_myPUBKEY")+(*username)+".pem").c_str())){
         std::cout<<"Impossibile eliminare i file DH\n";
-        free(username);
+        
         free(K_ab);
         disconnect(sd);
     }
-    if(remove((std::string("dh_")+username+"pubkey.pem").c_str())){
+    if(remove((std::string("dh_")+(*username)+"pubkey.pem").c_str())){
         std::cout<<"Impossibile eliminare i file DH\n";
-        free(username);
+        
         free(K_ab);
         disconnect(sd);
     }
     return K_ab;
-
-
 }
 
-bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* next_len, uint8_t* id, unsigned char* plaintext,unsigned char* key){
 
-    memcpy(counter,request,sizeof(uint64_t));
 
-    //controllo id
-    memcpy(id,request + sizeof(uint64_t),sizeof(uint8_t));
+void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
 
-    //controllo next_len
-    memcpy(next_len,request + sizeof(uint64_t) +  sizeof(uint8_t), sizeof(uint32_t));
+    uint8_t id;
+    std::string msg;
+    uint64_t file_len;
+    uint32_t num_packets;
 
-    //ricavo il ciphertext
-    unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
-    if(!ciphertext)
-        return false;
-    memcpy(ciphertext,request+ STD_AAD_LEN, SIZE_FILENAME);
-
-    unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
-    if(!aad)
-        return false;
-    unsigned char* tag = (unsigned char*)malloc(16);
-    if(!tag){
-        free(aad);
-        return false;
+    *(plaintext + SIZE_FILENAME -1 ) = '\0';
+    if(!check_string(std::string((char*)plaintext))){
+        id = 8; //ID di errore 
+        msg = std::string("Filename non valido");
+        msg.resize(SIZE_FILENAME);
+        file_len = 0;
     }
-    unsigned char* iv = (unsigned char*)malloc(12);
-    if(!iv){
-        free(tag);
-        free(aad);
-        return false;
+    else {
+        FILE* file = fopen( (*username + "/" + (char*)plaintext).c_str(),"r" );
+        if(!file){
+            id = 8; //ID di errore 
+            msg = std::string("File non esistente");
+            msg.resize(SIZE_FILENAME);
+            file_len = 0;
+        }
+        else{
+            fseek(file,0,SEEK_END);
+            file_len = (ftell(file) > UINT32_MAX)? 0: ftell(file);
+            rewind(file);
+        
+            if(!file_len){
+                id = 8;
+                msg = std::string("File troppo grande");
+                msg.resize(SIZE_FILENAME);
+            }
+            else{
+                id = 0; //ID ack
+                msg = std::string("");
+                msg.resize(SIZE_FILENAME);
+            }
+        }
+        num_packets = how_many_fragments(file_len);
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(id != 0) return;
+        
+        unsigned char* data;
+        uint32_t data_len;
+        uint32_t payload_len;
+        for(uint32_t i = 0; i < num_packets; i++){
+            if(num_packets == 1){
+                data = (unsigned char*)malloc(file_len);
+                fread(data,1,file_len,file);
+                data_len = file_len;
+            }
+            else if(num_packets - 1 == i){
+                data = (unsigned char*)malloc(file_len%MAX_PAYLOAD_SIZE);
+                fread(data,1,file_len%MAX_PAYLOAD_SIZE,file);
+                data_len = file_len%MAX_PAYLOAD_SIZE;
+            }
+            else{
+                data = (unsigned char*)malloc(MAX_PAYLOAD_SIZE);
+                fread(data,1,MAX_PAYLOAD_SIZE,file);
+                data_len = MAX_PAYLOAD_SIZE;
+            }
+            send_data_packet(data,key,sd,counter,data_len);
+            std::cout<<"INVIO IL PACCHETTO NUMERO: "<<i<<std::endl;
+            std::cout<<"Il counter è: "<<*counter<<std::endl;
+            free(data);
+            if(i % 50 == 0) usleep(100);
+        }
     }
-
-    memcpy(iv,request + sizeof(uint64_t) + sizeof(uint8_t) + sizeof(uint32_t), 12 );
-    memcpy(tag,request + SIZE_FILENAME + STD_AAD_LEN, 16);
-    memcpy(aad, request, STD_AAD_LEN);
-
-    if(!decrypt_gcm(ciphertext, SIZE_FILENAME, aad, STD_AAD_LEN, tag, key, iv , plaintext)){
-        std::cout<<"Errore nella decfiratura della richiesta\n";
-        free(aad);
-        free(tag);
-        free(iv);
-        free(ciphertext);
-        return false;
-    }   
-
-    free(aad);
-    free(tag);
-    free(iv);
-    free(ciphertext); 
-    return true;
 }
 
-void wait_request(int sd, uint64_t counter, unsigned char* key){
+void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* username){
 
     unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!request){
@@ -516,8 +535,7 @@ void wait_request(int sd, uint64_t counter, unsigned char* key){
     }
 
     //parametri da leggere nel pacchetto di richiesta
-    uint64_t recevied_count;
-    uint32_t next_len;
+    uint32_t num_packets;
     uint8_t id;
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
@@ -525,37 +543,48 @@ void wait_request(int sd, uint64_t counter, unsigned char* key){
         free(request);
         return;
     }
-    if(!read_request_param(request,&recevied_count,&next_len,&id,plaintext,key)){
+    if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
         free(plaintext);
         return;
     }
     free(request);
-    std::cout<<"COUNTER: "<<counter<<" ID: "<<(uint32_t)id<<" NEXT_LEN: "<<next_len<<" MSG: "<<(char*)plaintext<<std::endl;
-    if(recevied_count != counter){
-        std::cout<<"Counter errato\n";
-        free(plaintext);
-        return;
-    }
-    counter++;
-    *(plaintext + SIZE_FILENAME -1 ) = '\0';
-    if(!check_string(std::string((char*)plaintext))){
-        return;
+
+    switch(id){
+        case 1: //list();
+            break;
+        case 2: //upload(); 
+            break;
+        case 3: download(plaintext,key,sd,counter,username); 
+            break;
+        case 4: //rename(); 
+            break;
+        case 5: //delete_file(); 
+            break;
+        case 6: //logout(); 
+            break;
+        default: 
+            break;
     }
 }
 
 // routine eseguita dal thread
 void* manageConnection(void* s){
 
-    char* username;
+    std::string* username = new std::string();
     int sd = *((int*)s);
     unsigned int key_len;
  
     unsigned char* K_ab = handshake(sd,&key_len,username);
     while(true){
-        uint64_t counter = 0;
-        wait_request(sd,counter,K_ab);
+        uint64_t* counter = (uint64_t*)malloc(sizeof(uint64_t));
+        if(!counter){
+            free(K_ab);
+            disconnect(sd);
+        }
+        *counter = 0;
+        wait_request(sd,counter,K_ab,username);
     }
 
     disconnect(sd); 
@@ -569,7 +598,6 @@ int main(int n_args, char** args){
     socklen_t len;
     struct sockaddr_in server, client;
     int ret; /*controllo errori */
-    char user_input[MAX_USER_INPUT];
 
     /* variabili multiplexing I/O */
     int max_fd;
@@ -610,7 +638,6 @@ int main(int n_args, char** args){
 
     FD_ZERO(&MASTER);
     FD_ZERO(&READY);
-    FD_SET(STDIN_FILENO,&MASTER);
     FD_SET(listener,&MASTER);
 
     max_fd = listener;
@@ -620,25 +647,6 @@ int main(int n_args, char** args){
         for(i = 0; i <= max_fd; i++){
             if(!FD_ISSET(i,&READY))
                 continue;
-            else if(i == STDIN_FILENO){   
-                if(!fgets(user_input,MAX_USER_INPUT,stdin)){
-                    std::cerr<<"Error in reading user input\n";
-                    exit(1);
-                }
-                char* p = strchr(user_input,'\n');
-                if(p)
-                    *p = '\0';
-                else{
-                    scanf("%*[^\n]");
-                    scanf("%*c");
-                }
-                if(!strncmp(user_input,"shutdown",MAX_USER_INPUT)){
-                    ///////////////////////////////////
-                    //IMPLEMENTARE SHUTDOWN DEL SERVER
-                    /////////////////////////////////
-                }
-                
-            }
             else if(i == listener){ /* richiesta di connessione al server */
                 socklen_t addrlen = sizeof(client);
                 client_sd = (int *)malloc(sizeof(int));
