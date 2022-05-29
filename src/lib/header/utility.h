@@ -258,7 +258,7 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
     memcpy(aad, request, STD_AAD_LEN);
     uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
     if(!decrypt_gcm(ciphertext, SIZE_FILENAME, aad, STD_AAD_LEN, tag, key, iv , plaintext,plaintext_len)){
-        std::cout<<"Errore nella decfiratura della richiesta\n";
+        std::cout<<"Errore nella decifratura della richiesta\n";
         free(aad);
         free(tag);
         free(iv);

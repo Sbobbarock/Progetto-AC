@@ -2,3 +2,6 @@
 .vs/
 **/client
 **/server
+**/*.mp4
+**/*.pdf
+**/*.txt

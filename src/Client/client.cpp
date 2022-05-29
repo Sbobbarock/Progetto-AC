@@ -527,6 +527,7 @@ unsigned char* handshake(int sd){
         exit(1);
     }
     std::cout<<"Connessione con il server completata\n";
+    std::cout<<"-------------------\n";
     return K_ab;
     /*********************************************************
     7) la sessione con il server e' stata stabilita ed e' autentica e verificata! 
@@ -607,6 +608,10 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     free(plaintext);
     FILE* file = fopen(filename.c_str(),"w+");
     uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
+    float progress = 0.0;
+    int barWidth = 70;
+    int pos = barWidth * progress;
+    std::cout<<"Downloading "<<'"'<<filename<<'"'<<"..."<<std::endl;
 
     for(uint32_t i = 0; i < num_packets; i++){
         plaintext = receive_data_packet(sd,counter,key,plaintext_len);
@@ -618,17 +623,33 @@ void download(int sd, unsigned char* key, uint64_t* counter){
         }
         uint32_t ret;
         ret = fwrite(plaintext,1,*plaintext_len,file);
-        std::cout<<(float)i*100/num_packets<<std::endl;
+        progress = (float)i/num_packets;
+
+        std::cout << "[";
+        pos = barWidth * progress;
+        for (int j = 0; j < barWidth; ++j) {
+            if (j < pos) std::cout << "■";
+            else std::cout << " ";
+        }
+        if(i<num_packets-1) {
+            std::cout << "] " << int(progress * 100.0) << " %\r";
+        }
+        else {
+            std::cout << "] " << 100 << " %\r";
+        }
+        std::cout.flush();
         free(plaintext);
     }
     fclose(file);
-    
+    std::cout<<std::endl;
     //invio messaggio DONE
     filename = std::string("");
     filename.resize(SIZE_FILENAME);
     id = 7; //ID di done
     num_packets = 0;
     send_std_packet(filename, key,sd,counter,id,num_packets);
+    std::cout<<"Download completato!\n";
+    std::cout<<"-------------------\n";
     return;
 }
 
@@ -660,8 +681,6 @@ void operation(int sd, unsigned char* key) {
 
         case 3:
             download(sd, key,counter);
-            std::cout<<"Download completato\n";
-            std::cout<<"-------------------\n";
             break;
 
         case 4:

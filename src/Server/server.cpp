@@ -502,6 +502,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         unsigned char* data;
         uint32_t data_len;
         uint32_t payload_len;
+        float progress = 0.0;
         for(uint32_t i = 0; i < num_packets; i++){
             if(num_packets == 1){
                 data = (unsigned char*)malloc(file_len);
@@ -519,11 +520,18 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
                 data_len = MAX_PAYLOAD_SIZE;
             }
             send_data_packet(data,key,sd,counter,data_len);
-            std::cout<<float(i*100/num_packets)<<std::endl;
+            progress = (float)i/num_packets;
+            if(i<num_packets-1) {
+            std::cout << int(progress * 100.0) << " %\r";
+            }
+            else {
+                std::cout << 100 << " %\r";
+            }
+            std::cout.flush();
             free(data);
             sleep(0);
         }
-
+        std::cout<<std::endl;
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
         if(!request){
             std::cout<<"Errore nella ricezione della richiesta\n";
