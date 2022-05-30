@@ -562,7 +562,110 @@ uint32_t select_operation() {
 
 void list(){}
 
-void upload(){}
+void upload(int sd, unsigned char* key, uint64_t* counter){
+    std::cout<<"Inserisci il nome del file da caricare: ";
+    std::string filename;
+    std::cin>>filename;
+
+    if(!check_string(filename))
+        return;
+
+    uint8_t id;
+    std::string msg;
+    uint64_t file_len;
+    uint32_t num_packets;
+    FILE* file = fopen(filename.c_str(),"r");
+    if(!file){
+        std::cout<<"File non esistente"<<std::endl;
+        return;
+    }
+    else{
+        fseek(file,0,SEEK_END);
+        file_len = (ftell(file) > UINT32_MAX)? 0: ftell(file);
+        rewind(file);
+
+        if(!file_len){
+            std::cout<<"File troppo grande"<<std::endl;
+            return;
+        }
+        else{
+            msg = std::string("");
+            msg.resize(SIZE_FILENAME);
+        }
+        fclose(file);
+    }
+    filename.resize(SIZE_FILENAME);
+
+    id = 2;
+    num_packets = 0;
+    num_packets = how_many_fragments(file_len);
+    send_std_packet(filename, key,sd,counter,id,num_packets);
+
+    unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!response){
+        return;
+    }
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        std::cout<<"Errore nella malloc\n";
+        free(response);
+        return;
+    }
+    
+    if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(response);
+        free(plaintext);
+        return;
+    }
+    plaintext[SIZE_FILENAME - 1] = '\0';
+    free(response);
+
+    if(id == 8){ //ricevuto errore
+        std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        return;
+    }
+    else if(id != 0){
+        std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        return;
+    }
+    //std::cout<<"COUNTER: "<<*counter<<" ID: "<<(uint32_t)id<<" NUM_PACKETS: "<<num_packets<<" MSG: "<<(char*)plaintext<<std::endl;
+    free(plaintext);
+    std::cout<<"Uploading "<<'"'<<filename<<'"'<<"..."<<std::endl;
+    if(!read_transfer_op("",num_packets,file_len, filename,sd, key, counter)) {
+        std::cout<<"Uh oh..."<<std::endl;
+        return;
+    }
+    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!request){
+        std::cout<<"Errore nella ricezione della richiesta\n";
+        return;
+    }
+    //dovrei ricevere pacchetto richiesta DONE
+    //parametri da leggere nel pacchetto di richiesta
+    unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!req_payload){
+        std::cout<<"Errore nella malloc\n";
+        free(request);
+        return;
+    }
+    if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(request);
+        free(plaintext);
+        return;
+    }
+    free(request);
+    if(id != 7){
+        //Implementa invio errore da client
+        std::cout<<"Errore: il client non ha ricevuto il file\n";
+        return;
+    }
+    std::cout<<std::endl;
+    std::cout<<"Upload completato!\n";
+    std::cout<<"-------------------\n";
+    return;
+}
 
 void download(int sd, unsigned char* key, uint64_t* counter){
 
@@ -606,56 +709,25 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     }
     //std::cout<<"COUNTER: "<<*counter<<" ID: "<<(uint32_t)id<<" NUM_PACKETS: "<<num_packets<<" MSG: "<<(char*)plaintext<<std::endl;
     free(plaintext);
-    FILE* file = fopen(filename.c_str(),"w+");
-    uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
-    float progress = 0.0;
-    int barWidth = 70;
-    int pos = barWidth * progress;
     std::cout<<"Downloading "<<'"'<<filename<<'"'<<"..."<<std::endl;
-
-    for(uint32_t i = 1; i < num_packets+1; i++){
-        plaintext = receive_data_packet(sd,counter,key,plaintext_len);
-        if(!plaintext){
-            std::cout<<"Errore nella ricezione del pacchetto\n";
-            fclose(file);
-            remove(filename.c_str());
-            return;
-        }
-        uint32_t ret;
-        ret = fwrite(plaintext,1,*plaintext_len,file);
-        progress = (float)i/num_packets;
-
-        std::cout << "[";
-        pos = barWidth * progress;
-        for (int j = 0; j < barWidth; ++j) {
-            if (j < pos) std::cout << "■";
-            else std::cout << " ";
-        }
-        if(i<num_packets-1) {
-            std::cout << " ] " << int(progress * 100.0) << " %\r";
-        }
-        else {
-            std::cout << " ] " << 100 << " %\r";
-        }
-        std::cout.flush();
-        free(plaintext);
+    if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
+        std::cout<<"Uh oh..."<<std::endl;
     }
-    free(plaintext_len);
-    fclose(file);
-    fflush(file);
+
     std::cout<<std::endl;
+    std::cout<<"Download completato!\n";
+    std::cout<<"-------------------\n";
+
     //invio messaggio DONE
     filename = std::string("");
     filename.resize(SIZE_FILENAME);
     id = 7; //ID di done
     num_packets = 0;
     send_std_packet(filename, key,sd,counter,id,num_packets);
-    std::cout<<"Download completato!\n";
-    std::cout<<"-------------------\n";
-    return;
+    
 }
 
-void rename(){}
+void rename(int sd, unsigned char* key, uint64_t* counter){}
 
 void delete_file(){}
 
@@ -678,7 +750,7 @@ void operation(int sd, unsigned char* key) {
             break;
 
         case 2:
-            upload();
+            upload(sd, key,counter);
             break;
 
         case 3:
@@ -686,7 +758,7 @@ void operation(int sd, unsigned char* key) {
             break;
 
         case 4:
-            rename();
+            rename(sd, key,counter);
             break;
 
         case 5:

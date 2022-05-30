@@ -397,3 +397,108 @@ unsigned char* receive_data_packet(int sd,uint64_t* counter,unsigned char* key,u
 uint32_t how_many_fragments(uint64_t size){
     return size/MAX_PAYLOAD_SIZE + (size % MAX_PAYLOAD_SIZE != 0);
 }
+
+bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsigned char* key, uint64_t* counter) {
+    FILE* file = fopen(filename.c_str(),"w+");
+    if(!file) {
+        return false;
+    }
+    unsigned char* plaintext;
+    uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
+    float progress = 0.0;
+    int barWidth = 70;
+    int pos = barWidth * progress;
+    for(uint32_t i = 0; i < num_packets; i++){
+        plaintext = receive_data_packet(sd,counter,key,plaintext_len);
+        if(!plaintext){
+            std::cout<<"Errore nella ricezione del pacchetto\n";
+            fclose(file);
+            remove(filename.c_str());
+            return false;
+        }
+        uint32_t ret;
+        ret = fwrite(plaintext,1,*plaintext_len,file);
+        progress = (float)i/num_packets;
+        if(num_packets == 1) {
+            progress = 0.999;
+        }
+
+        std::cout << "[";
+        pos = barWidth * progress;
+        for (int j = 0; j < barWidth; ++j) {
+            if (j < pos) std::cout << "■";
+            else std::cout << " ";
+        }
+        if(i<num_packets-1) {
+            std::cout << "] " << int(progress * 100.0) << " %\r";
+        }
+        else {
+            std::cout << "] " << 100 << " %\r";
+        }
+        std::cout.flush();
+        free(plaintext);
+    }
+    free(plaintext_len);
+    fclose(file);
+    fflush(file);
+    return true;
+}
+
+bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_len, std::string filename, int sd, unsigned char* key, uint64_t* counter){
+    FILE* file;
+    if(username.empty()) {
+        file = fopen(filename.c_str(), "r");
+    }
+    else {
+        file = fopen((username + "/" + filename).c_str(),"r");
+    }
+    if(!file) {
+        return false;
+    }
+    unsigned char* data;
+    uint32_t data_len;
+    uint32_t payload_len;
+    float progress = 0.0;
+    int barWidth = 70;
+    int pos = barWidth * progress;
+    for(uint32_t i = 0; i < num_packets; i++){
+        if(num_packets == 1){
+            data = (unsigned char*)malloc(file_len);
+            fread(data,1,file_len,file);
+            data_len = file_len;
+        }
+        else if(num_packets - 1 == i){
+            data = (unsigned char*)malloc(file_len%MAX_PAYLOAD_SIZE);
+            fread(data,1,file_len%MAX_PAYLOAD_SIZE,file);
+            data_len = file_len%MAX_PAYLOAD_SIZE;
+        }
+        else{
+            data = (unsigned char*)malloc(MAX_PAYLOAD_SIZE);
+            fread(data,1,MAX_PAYLOAD_SIZE,file);
+            data_len = MAX_PAYLOAD_SIZE;
+        }
+        send_data_packet(data,key,sd,counter,data_len);
+        progress = (float)i/num_packets;
+        if(num_packets == 1) {
+            progress = 0.999;
+        }
+
+        std::cout << "[";
+        pos = barWidth * progress;
+        for (int j = 0; j < barWidth; ++j) {
+            if (j < pos) std::cout << "■";
+            else std::cout << " ";
+        }
+        if(i<num_packets-1) {
+            std::cout << "] " << int(progress * 100.0) << " %\r";
+        }
+        else {
+            std::cout << "] " << 100 << " %\r";
+        }
+        std::cout.flush();
+        free(data);
+        sleep(0);
+    }
+    fclose(file);
+    return true;
+}

@@ -455,8 +455,6 @@ unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
     return K_ab;
 }
 
-
-
 void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
 
     uint8_t id;
@@ -470,9 +468,11 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
         file_len = 0;
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+        return;
     }
     else {
-        FILE* file = fopen( (*username + "/" + (char*)plaintext).c_str(),"r" );
+        FILE* file = fopen((*username + "/" + (char*)plaintext).c_str(),"r");
         if(!file){
             id = 8; //ID di errore 
             msg = std::string("File non esistente");
@@ -494,42 +494,16 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
                 msg = std::string("");
                 msg.resize(SIZE_FILENAME);
             }
+            fclose(file);
         }
         num_packets = how_many_fragments(file_len);
         send_std_packet(msg,key,sd,counter,id,num_packets);
         if(id != 0) return;
-        
-        unsigned char* data;
-        uint32_t data_len;
-        uint32_t payload_len;
-        float progress = 0.0;
-        for(uint32_t i = 0; i < num_packets; i++){
-            if(num_packets == 1){
-                data = (unsigned char*)malloc(file_len);
-                fread(data,1,file_len,file);
-                data_len = file_len;
-            }
-            else if(num_packets - 1 == i){
-                data = (unsigned char*)malloc(file_len%MAX_PAYLOAD_SIZE);
-                fread(data,1,file_len%MAX_PAYLOAD_SIZE,file);
-                data_len = file_len%MAX_PAYLOAD_SIZE;
-            }
-            else{
-                data = (unsigned char*)malloc(MAX_PAYLOAD_SIZE);
-                fread(data,1,MAX_PAYLOAD_SIZE,file);
-                data_len = MAX_PAYLOAD_SIZE;
-            }
-            send_data_packet(data,key,sd,counter,data_len);
-            progress = (float)i/num_packets;
-            if(i<num_packets-1) {
-            std::cout << int(progress * 100.0) << " %\r";
-            }
-            else {
-                std::cout << 100 << " %\r";
-            }
-            std::cout.flush();
-            free(data);
-            sleep(0);
+        std::string filename;
+        filename = std::string((char*)plaintext);
+        if(!read_transfer_op(*username, num_packets, file_len, filename, sd, key, counter)) {
+            std::cout<<":("<<std::endl;
+            return;
         }
         std::cout<<std::endl;
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
@@ -560,10 +534,46 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             std::cout<<"Errore: il client non ha ricevuto il file\n";
             return;
         }
-
+        std::cout<<"Download completato!\n";
+        std::cout<<"-------------------\n";
         return;
     }
 }
+
+void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username, uint32_t num_packets){
+    uint8_t id;
+    std::string msg;
+    uint64_t file_len;
+
+    id = 0; //ID ack
+    msg = std::string("");
+    msg.resize(SIZE_FILENAME);
+
+    *(plaintext + SIZE_FILENAME -1 ) = '\0';
+    if(!check_string(std::string((char*)plaintext))){
+        id = 8; //ID di errore 
+        msg = std::string("Filename non valido");
+        msg.resize(SIZE_FILENAME);
+        file_len = 0;
+    }
+    send_std_packet(msg,key,sd,counter,id,num_packets);
+    std::string filename = (*username + "/" + (char*)plaintext).c_str();
+    if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
+        std::cout<<"Uh oh..."<<std::endl;
+    }
+
+    std::cout<<std::endl;
+    std::cout<<"Upload completato!\n";
+    std::cout<<"-------------------\n";
+
+    //invio messaggio DONE
+    filename = std::string("");
+    filename.resize(SIZE_FILENAME);
+    id = 7; //ID di done
+    num_packets = 0;
+    send_std_packet(filename, key,sd,counter,id,num_packets);
+}
+
 
 void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* username){
     while(true) {
@@ -583,6 +593,7 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
             return;
         }
         if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
+            std::cout<<"Counter: "<<*counter<<std::endl;
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
             free(plaintext);
@@ -593,10 +604,9 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
         switch(id){
             case 1: //list();
                 break;
-            case 2: //upload(); 
+            case 2: upload(plaintext,key,sd,counter,username,num_packets); 
                 break;
             case 3: download(plaintext,key,sd,counter,username); 
-            std::cout<<"Download completato!\n";
                 break;
             case 4: //rename(); 
                 break;
