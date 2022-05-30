@@ -3,6 +3,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <fstream>
+#include <dirent.h>
 #include "../lib/header/DH.h"
 #include "../lib/header/utility.h"
 #include "../lib/header/certificate.h"
@@ -455,6 +456,75 @@ unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
     return K_ab;
 }
 
+void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
+    uint8_t id;
+    std::string plaintext;
+    struct dirent *dirent;
+    DIR *dir;
+    dir = opendir((*username + "/").c_str());
+    if (dir == NULL) {
+        id = 8; //ID di errore 
+        plaintext = std::string("Cartella non trovata");
+        plaintext.resize(SIZE_FILENAME);
+        send_std_packet(plaintext,key,sd,counter,id,1);
+        return;
+    }
+    char* buffer;
+    while ((dirent = readdir(dir)) != NULL) {
+        /////////////////////////////////////////////////
+        ///// controllare vulnerabilita' di sprintf /////
+        /////////////////////////////////////////////////
+        sprintf(buffer, "%s\n", dirent->d_name);
+        plaintext = plaintext + "└── " + buffer;
+    }
+    if(!plaintext.empty()) {
+        plaintext.erase(0,10);
+    }
+    if(!plaintext.empty()) {
+        plaintext.resize(plaintext.size()-13);
+    }
+    closedir(dir);
+    free(dirent);
+    // considerare la possibilita' che la dimensione della lista maggiore sia di 255 byte?
+    send_std_packet(plaintext,key,sd,counter,0,1);
+    return;
+}
+
+void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username, uint32_t num_packets){
+    uint8_t id;
+    std::string msg;
+    uint64_t file_len;
+
+    id = 0; //ID ack
+    msg = std::string("");
+    msg.resize(SIZE_FILENAME);
+
+    *(plaintext + SIZE_FILENAME -1 ) = '\0';
+    if(!check_string(std::string((char*)plaintext))){
+        id = 8; //ID di errore 
+        msg = std::string("Filename non valido");
+        msg.resize(SIZE_FILENAME);
+        file_len = 0;
+    }
+    send_std_packet(msg,key,sd,counter,id,num_packets);
+    std::string filename = (*username + "/" + (char*)plaintext).c_str();
+    if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
+        std::cout<<"Uh oh..."<<std::endl;
+        return;
+    }
+
+    std::cout<<std::endl;
+    std::cout<<"Upload completato!\n";
+    std::cout<<"-------------------\n";
+
+    //invio messaggio DONE
+    filename = std::string("");
+    filename.resize(SIZE_FILENAME);
+    id = 7; //ID di done
+    num_packets = 0;
+    send_std_packet(filename, key,sd,counter,id,num_packets);
+}
+
 void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
 
     uint8_t id;
@@ -540,41 +610,17 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
     }
 }
 
-void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username, uint32_t num_packets){
-    uint8_t id;
-    std::string msg;
-    uint64_t file_len;
+void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
 
-    id = 0; //ID ack
-    msg = std::string("");
-    msg.resize(SIZE_FILENAME);
-
-    *(plaintext + SIZE_FILENAME -1 ) = '\0';
-    if(!check_string(std::string((char*)plaintext))){
-        id = 8; //ID di errore 
-        msg = std::string("Filename non valido");
-        msg.resize(SIZE_FILENAME);
-        file_len = 0;
-    }
-    send_std_packet(msg,key,sd,counter,id,num_packets);
-    std::string filename = (*username + "/" + (char*)plaintext).c_str();
-    if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
-        std::cout<<"Uh oh..."<<std::endl;
-        return;
-    }
-
-    std::cout<<std::endl;
-    std::cout<<"Upload completato!\n";
-    std::cout<<"-------------------\n";
-
-    //invio messaggio DONE
-    filename = std::string("");
-    filename.resize(SIZE_FILENAME);
-    id = 7; //ID di done
-    num_packets = 0;
-    send_std_packet(filename, key,sd,counter,id,num_packets);
 }
 
+void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
+
+}
+
+void logout(unsigned char* key, int sd,uint64_t* counter){
+
+}
 
 void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* username){
     while(true) {
@@ -594,7 +640,6 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
             return;
         }
         if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
-            std::cout<<"Counter: "<<*counter<<std::endl;
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
             free(plaintext);
@@ -603,17 +648,17 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
         free(request);
 
         switch(id){
-            case 1: //list();
+            case 1: list(key,sd,counter,username);
                 break;
             case 2: upload(plaintext,key,sd,counter,username,num_packets); 
                 break;
             case 3: download(plaintext,key,sd,counter,username); 
                 break;
-            case 4: //rename(); 
+            case 4: rename(plaintext,key,sd,counter,username); 
                 break;
-            case 5: //delete_file(); 
+            case 5: delete_file(plaintext,key,sd,counter,username); 
                 break;
-            case 6: //logout(); 
+            case 6: logout(key,sd,counter); 
                 break;
             default: 
                 break;

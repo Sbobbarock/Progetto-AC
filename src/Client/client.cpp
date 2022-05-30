@@ -560,7 +560,44 @@ uint32_t select_operation() {
     return operation_id;
 }
 
-void list(){}
+void list(int sd, unsigned char* key, uint64_t* counter){
+    uint8_t id = 1;
+    uint32_t num_packets = 0;
+    send_std_packet("", key,sd,counter,id,num_packets);
+    unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!response){
+        return;
+    }
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        std::cout<<"Errore nella malloc\n";
+        free(response);
+        return;
+    }
+    
+    if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(response);
+        free(plaintext);
+        return;
+    }
+    plaintext[SIZE_FILENAME - 1] = '\0';
+    free(response);
+
+    if(id == 8){ //ricevuto errore
+        std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        return;
+    }
+    else if(id != 0){
+        std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        return;
+    }
+    std::cout<<"-------------------\n";
+    std::cout<<plaintext;
+    std::cout<<"-------------------\n";
+    free(plaintext);
+    return;
+}
 
 void upload(int sd, unsigned char* key, uint64_t* counter){
     std::cout<<"Inserisci il nome del file da caricare: ";
@@ -629,7 +666,6 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
         return;
     }
-    //std::cout<<"COUNTER: "<<*counter<<" ID: "<<(uint32_t)id<<" NUM_PACKETS: "<<num_packets<<" MSG: "<<(char*)plaintext<<std::endl;
     free(plaintext);
     std::cout<<"Uploading "<<'"'<<filename<<'"'<<"..."<<std::endl;
     if(!read_transfer_op("",num_packets,file_len, filename,sd, key, counter)) {
@@ -710,7 +746,6 @@ void download(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
         return;
     }
-    //std::cout<<"COUNTER: "<<*counter<<" ID: "<<(uint32_t)id<<" NUM_PACKETS: "<<num_packets<<" MSG: "<<(char*)plaintext<<std::endl;
     free(plaintext);
     std::cout<<"Downloading "<<'"'<<filename<<'"'<<"..."<<std::endl;
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
@@ -731,11 +766,17 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     
 }
 
-void rename(int sd, unsigned char* key, uint64_t* counter){}
+void rename(int sd, unsigned char* key, uint64_t* counter){
 
-void delete_file(){}
+}
 
-void logout(){}
+void delete_file(int sd, unsigned char* key, uint64_t* counter){
+
+}
+
+void logout(int sd, unsigned char* key, uint64_t* counter){
+    
+}
 
 void operation(int sd, unsigned char* key) {
     uint64_t* counter = (uint64_t*)malloc(sizeof(uint64_t));
@@ -750,7 +791,7 @@ void operation(int sd, unsigned char* key) {
         switch (op_id) 
         {
         case 1:
-            list();
+            list(sd, key,counter);
             break;
 
         case 2:
@@ -766,11 +807,11 @@ void operation(int sd, unsigned char* key) {
             break;
 
         case 5:
-            delete_file();
+            delete_file(sd, key,counter);
             break;
 
         case 6:
-            logout();
+            logout(sd, key,counter);
             break;
         
         default:
