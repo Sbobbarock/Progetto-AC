@@ -560,7 +560,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             std::cout<<"Errore: il client non ha ricevuto il file\n";
             return;
         }
-  
+
         return;
     }
 }

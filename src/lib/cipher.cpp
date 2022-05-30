@@ -35,6 +35,8 @@ bool encrypt_gcm(unsigned char *plaintext, int plaintext_len,
     if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag))
         return false;
 
+    EVP_CIPHER_CTX_cleanup(ctx);
+
     EVP_CIPHER_CTX_free(ctx);
     return true;
 }
@@ -79,6 +81,8 @@ bool decrypt_gcm(unsigned char *ciphertext, uint32_t ciphertext_len,
     ret = EVP_DecryptFinal(ctx, plaintext + len, &len);
 
     EVP_CIPHER_CTX_cleanup(ctx);
+
+    EVP_CIPHER_CTX_free(ctx);
 
     if(ret > 0) {
         /* Success */

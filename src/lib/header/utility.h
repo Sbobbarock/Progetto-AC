@@ -257,7 +257,7 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
     memcpy(tag,request + SIZE_FILENAME + STD_AAD_LEN, 16);
     memcpy(aad, request, STD_AAD_LEN);
     uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
-    if(!decrypt_gcm(ciphertext, SIZE_FILENAME, aad, STD_AAD_LEN, tag, key, iv , plaintext,plaintext_len)){
+    if(!decrypt_gcm(ciphertext, SIZE_FILENAME, aad, STD_AAD_LEN, tag, key, iv, plaintext,plaintext_len)){
         std::cout<<"Errore nella decifratura della richiesta\n";
         free(aad);
         free(tag);
@@ -383,7 +383,7 @@ unsigned char* receive_data_packet(int sd,uint64_t* counter,unsigned char* key,u
     }
     (*counter)++;
     unsigned char* plaintext = (unsigned char*)malloc(*data_len);
-    if(!decrypt_gcm(payload, *data_len, aad, AAD_LEN, tag, key, iv , plaintext,plaintext_len)){
+    if(!decrypt_gcm(payload, *data_len, aad, AAD_LEN, tag, key, iv, plaintext,plaintext_len)){
         return NULL;
     }
     free(data_len);

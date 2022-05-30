@@ -596,7 +596,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     plaintext[SIZE_FILENAME - 1] = '\0';
     free(response);
 
-    if( id == 8){ //ricevuto errore
+    if(id == 8){ //ricevuto errore
         std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
         return;
     }
@@ -613,7 +613,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     int pos = barWidth * progress;
     std::cout<<"Downloading "<<'"'<<filename<<'"'<<"..."<<std::endl;
 
-    for(uint32_t i = 0; i < num_packets; i++){
+    for(uint32_t i = 1; i < num_packets+1; i++){
         plaintext = receive_data_packet(sd,counter,key,plaintext_len);
         if(!plaintext){
             std::cout<<"Errore nella ricezione del pacchetto\n";
@@ -632,15 +632,17 @@ void download(int sd, unsigned char* key, uint64_t* counter){
             else std::cout << " ";
         }
         if(i<num_packets-1) {
-            std::cout << "] " << int(progress * 100.0) << " %\r";
+            std::cout << " ] " << int(progress * 100.0) << " %\r";
         }
         else {
-            std::cout << "] " << 100 << " %\r";
+            std::cout << " ] " << 100 << " %\r";
         }
         std::cout.flush();
         free(plaintext);
     }
+    free(plaintext_len);
     fclose(file);
+    fflush(file);
     std::cout<<std::endl;
     //invio messaggio DONE
     filename = std::string("");
