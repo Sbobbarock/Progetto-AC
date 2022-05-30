@@ -89,7 +89,7 @@ bool decrypt_gcm(unsigned char *ciphertext, uint32_t ciphertext_len,
         *plaintext_len += len;
         return true;
     } else {
-        std::cout<<ERR_error_string(ERR_get_error(),NULL);
+        std::cout<<ERR_error_string(ERR_get_error(),NULL)<<std::endl;
         return false;
     }
 }

@@ -6,6 +6,7 @@
 #include <openssl/rand.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
+#include <fcntl.h>
 #include <cmath>
 #include "cipher.h"
 
@@ -117,6 +118,26 @@ bool check_string(std::string s){
         return false;
     }
     return true;
+}
+
+void clean_socket(int sd){
+    
+    std::cout<<"Ripristino della connessione in corso...\n";
+    fcntl(sd, F_SETFL, fcntl(sd, F_GETFL, 0) | O_NONBLOCK);
+    unsigned char* buffer = (unsigned char*)malloc(500);
+    int ret = recv(sd,buffer,500,0);
+    while(ret != -1){
+        ret = recv(sd,buffer,500,0);
+        if(ret < 500){
+            usleep(60000);
+            ret = recv(sd,buffer,500,0);
+        }
+    }
+    fcntl(sd, F_SETFL, fcntl(sd, F_GETFL, 0));
+    free(buffer);
+    std::cout<<"Ripristino completato\n";
+    std::cout<<std::endl;
+    return;
 }
 
 unsigned char* build_aad_std(uint64_t counter, uint32_t num_packets, uint8_t id, unsigned char* iv){
@@ -267,6 +288,7 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
     }   
     if(received_count != *counter){
         std::cout<<"Counter errato\n";
+        std::cout<<received_count<<"   !=  "<<*counter<<std::endl;
         return false;
     }
     (*counter)++;
@@ -414,6 +436,8 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
             std::cout<<"Errore nella ricezione del pacchetto\n";
             fclose(file);
             remove(filename.c_str());
+            (*counter) += num_packets - (i+1);
+            clean_socket(sd);
             return false;
         }
         uint32_t ret;
@@ -497,8 +521,9 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
         }
         std::cout.flush();
         free(data);
-        sleep(0);
+        usleep(1);
     }
     fclose(file);
     return true;
 }
+

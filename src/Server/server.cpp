@@ -560,6 +560,7 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     std::string filename = (*username + "/" + (char*)plaintext).c_str();
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
+        return;
     }
 
     std::cout<<std::endl;

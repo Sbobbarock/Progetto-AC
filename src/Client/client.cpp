@@ -658,13 +658,16 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     free(request);
     if(id != 7){
         //Implementa invio errore da client
-        std::cout<<"Errore: il client non ha ricevuto il file\n";
+        std::cout<<"Errore: il server non ha ricevuto il file\n";
         return;
     }
     std::cout<<std::endl;
     std::cout<<"Upload completato!\n";
     std::cout<<"-------------------\n";
     return;
+//////////////////////////////////////////////////////
+// IMPLEMENTARE UNA SPECIE DI TIMER PER VEDERE SE RICEVO IL PACCHETTO DONE ENTRO TOT TEMPO
+/////////////////////////////////////////////////////
 }
 
 void download(int sd, unsigned char* key, uint64_t* counter){
@@ -712,6 +715,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     std::cout<<"Downloading "<<'"'<<filename<<'"'<<"..."<<std::endl;
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
+        return;
     }
 
     std::cout<<std::endl;
