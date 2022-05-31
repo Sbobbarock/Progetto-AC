@@ -534,7 +534,7 @@ unsigned char* handshake(int sd){
 }
 
 uint32_t select_yesno() {
-    std::cout<<"Eliminare definitivamente il file? [Y/N]\n";
+    std::cout<<"Eliminare definitivamente il file? [Y/n] ";
     std::string buffer;
     std::getline(std::cin, buffer);
     std::cin>>buffer;
