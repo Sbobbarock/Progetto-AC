@@ -471,11 +471,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     }
     char* buffer;
     while ((dirent = readdir(dir)) != NULL) {
-        /////////////////////////////////////////////////
-        ///// controllare vulnerabilita' di sprintf /////
-        /////////////////////////////////////////////////
-        sprintf(buffer, "%s\n", dirent->d_name);
-        plaintext = plaintext + "└── " + buffer;
+        plaintext = plaintext.append("└── " + (std::string)dirent->d_name + "\n");
     }
     if(!plaintext.empty()) {
         plaintext.erase(0,10);
@@ -485,6 +481,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     }
     closedir(dir);
     free(dirent);
+    plaintext.resize(SIZE_FILENAME);
     // considerare la possibilita' che la dimensione della lista maggiore sia di 255 byte?
     send_std_packet(plaintext,key,sd,counter,0,1);
     return;
