@@ -36,21 +36,28 @@ git clone 'https://github.com/TheAsel/Progetto-AC'
 
 4. Entra nella cartella del progetto:
 ```bash
-cd Progetto-AC/
+cd Progetto-AC/src/
 ```
 
-5. Compila il server:
+5. Compila ed esegui il client ed il server automaticamente:
 ```bash
-cd src/Server/
+./compile
+```
+
+In alternativa, per compilare ed eseguire manualmente:
+
+6. Compila il server:
+```bash
+cd Server/
 g++ server.cpp ../lib/signature.cpp ../lib/certificate.cpp ../lib/DH.cpp ../lib/cipher.cpp -o server -lcrypto -lpthread
 ```
 
-6. Esegui il server, sostituendo a [port] la porta che si desidera utilizzare:
+7. Esegui il server, sostituendo a [port] la porta che si desidera utilizzare:
 ```bash
 ./server [port]
 ```
 
-7. Compila il client:
+8. Compila il client:
 ```bash
 cd ../Client/
 ```
@@ -60,9 +67,9 @@ cd <username>/
 g++ ../client.cpp ../../lib/certificate.cpp ../../lib/signature.cpp ../../lib/DH.cpp ../../lib/cipher.cpp -o client -lcrypto
 ```
 
-8. Esegui il client, sostituendo a [port] la porta del server scelta precedentemente:
+9. Esegui il client, sostituendo a [port] la porta del server scelta precedentemente:
 ```bash
 ./client [port]
 ```
 
-9. Have fun!
+10. Have fun!
