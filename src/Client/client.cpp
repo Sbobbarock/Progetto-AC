@@ -602,7 +602,7 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         free(response);
         free(plaintext);
         clean_socket(sd);
-        (*counter)++;
+        (*counter) += num_packets +1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -617,41 +617,26 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         return;
     }
     std::string list;
-    for(uint32_t i = 0; i < num_packets; i++){
-        unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
-        if(!response){
-            return;
-        }
-        unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
-        if(!plaintext){
-            std::cout<<"Errore nella malloc\n";
-            free(response);
-            return;
-        }
-        
-        if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
-            std::cout<<"Impossibile leggere correttamente la richiesta\n";
-            free(response);
-            free(plaintext);
-            return;
-        }
-        plaintext[SIZE_FILENAME - 1] = '\0';
-        free(response);
+    uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
 
-        if(id == 8){ //ricevuto errore
-            std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+    for(uint32_t i = 0; i < num_packets; i++){
+    
+        unsigned char* plaintext = receive_data_packet(sd,counter,key,plaintext_len);
+        if(!plaintext){
+            free(plaintext);
+            free(plaintext_len);
+            clean_socket(sd);
+            (*counter) += num_packets - (i+1);
             return;
         }
-        else if(id != 0){
-            std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
-            return;
-        }
+        plaintext[*plaintext_len - 1] = '\0';
+        
         list = list.append((char*)plaintext);
+        free(plaintext);
     }
 
     std::cout<<"-------------------\n";
     std::cout<<list;
-    free(plaintext);
 
     //invio messaggio DONE
     list = std::string("");
@@ -717,7 +702,7 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         free(response);
         free(plaintext);
         clean_socket(sd);
-        (*counter)++;
+        (*counter) += num_packets +1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -757,7 +742,7 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         free(request);
         free(plaintext);
         clean_socket(sd);
-        (*counter)++;
+        (*counter) += num_packets +1;
         return;
     }
     free(request);
@@ -769,9 +754,6 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     std::cout<<std::endl;
     std::cout<<"Upload completato!\n";
     return;
-//////////////////////////////////////////////////////
-// IMPLEMENTARE UNA SPECIE DI TIMER PER VEDERE SE RICEVO IL PACCHETTO DONE ENTRO TOT TEMPO
-/////////////////////////////////////////////////////
 }
 
 void download(int sd, unsigned char* key, uint64_t* counter){
@@ -802,7 +784,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
         free(response);
         free(plaintext);
         clean_socket(sd);
-        (*counter)++;
+        (*counter) += num_packets +1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -851,25 +833,29 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
 
     //leggo la risposta del server
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
-    if(response){
+    if(!response){
         return;
     }
+
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
         std::cout<<"Errore nella malloc\n";
         free(response);
         return;
     }
+
     if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
         clean_socket(sd);
-        (*counter)++;
+        (*counter) += num_packets +1;
         return;
     }
-    plaintext[SIZE_FILENAME - 1] = '\0';
+    
     free(response);
+
+    plaintext[SIZE_FILENAME - 1] = '\0';
     if(id == 8){ //ricevuto errore
         std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
         return;
@@ -878,9 +864,8 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
         return;
     }
-    free(plaintext);
     
-    std::cout<<"Inserire il nome con cui rinominare il file: ";
+    std::cout<<"Rinominare in: ";
     std::string new_filename;
     std::cin>>new_filename;
 
@@ -888,6 +873,29 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
         return;
 
     send_data_packet((unsigned char*)new_filename.c_str(),key,sd,counter,new_filename.length()+1);
+
+    //aspetto la risposta dal server
+    response = wait_for_done(sd);
+    if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(response);
+        free(plaintext);
+        clean_socket(sd);
+        (*counter) += num_packets +1;
+        return;
+    }
+    free(response);
+    plaintext[SIZE_FILENAME - 1] ='\0';
+    if(id != 7){
+        std::cout<<(char*)plaintext<<std::endl;
+        free(plaintext);
+        return;
+    }
+    else{
+        free(plaintext);
+        std::cout<<"Operazione terminata con successo\n"<<std::endl;
+        return;
+    }
 }
 
 void delete_file(int sd, unsigned char* key, uint64_t* counter){
@@ -922,6 +930,8 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
+        clean_socket(sd);
+        (*counter) += num_packets + 1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -965,7 +975,7 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
 
     //dovrei ricevere pacchetto richiesta DONE
     //parametri da leggere nel pacchetto di richiesta
-    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    unsigned char* request = wait_for_done(sd);
     if(!request){
         std::cout<<"Delete failed\n"<<std::endl;
         return;
@@ -981,7 +991,7 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         free(request);
         free(plaintext);
         clean_socket(sd);
-        (*counter)++;
+        (*counter) += num_packets +1;
         return;
     }
     free(request);
