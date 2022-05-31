@@ -573,10 +573,10 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             return;
         }
         std::cout<<std::endl;
-        unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+        unsigned char* request = wait_for_done(sd);
         if(!request){
-            std::cout<<"Errore nella ricezione della richiesta\n";
-            disconnect(sd);
+            std::cout<<"Download failed\n"<<std::endl;
+            return;
         }
 
         //dovrei ricevere pacchetto richiesta DONE
@@ -593,6 +593,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
             free(plaintext);
+            clean_socket(sd);
+            (*counter)++;
             return;
         }
         free(request);
@@ -640,6 +642,8 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
             free(plaintext);
+            clean_socket(sd);
+            (*counter)++;
             return;
         }
         free(request);

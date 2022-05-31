@@ -527,3 +527,20 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
     return true;
 }
 
+unsigned char* wait_for_done(int sd){
+    
+    fd_set READY;
+    struct timeval* timer = (timeval*)malloc(sizeof(struct timeval));
+    timer->tv_sec = 1;
+    int ret;
+    FD_ZERO(&READY);
+    FD_SET(sd,&READY);
+    ret = select(sd+1,&READY,NULL,NULL,timer);
+    if(!ret){
+        free(timer);
+        return NULL;
+    }
+    
+    free(timer);
+    return recv_packet<unsigned char>(sd,REQ_LEN);
+}

@@ -579,6 +579,8 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
+        clean_socket(sd);
+        (*counter)++;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -653,6 +655,8 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
+        clean_socket(sd);
+        (*counter)++;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -672,9 +676,9 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Uh oh..."<<std::endl;
         return;
     }
-    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    unsigned char* request = wait_for_done(sd);
     if(!request){
-        std::cout<<"Errore nella ricezione della richiesta\n";
+        std::cout<<"Upload failed\n"<<std::endl;
         return;
     }
     //dovrei ricevere pacchetto richiesta DONE
@@ -689,6 +693,8 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
         free(plaintext);
+        clean_socket(sd);
+        (*counter)++;
         return;
     }
     free(request);
@@ -733,6 +739,8 @@ void download(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
+        clean_socket(sd);
+        (*counter)++;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
