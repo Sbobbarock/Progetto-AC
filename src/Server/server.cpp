@@ -487,7 +487,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
                 plaintext = "├── " + (std::string)dirent->d_name + "\n";
             }
             plaintext.resize(SIZE_FILENAME);
-            send_std_packet(plaintext,key,sd,counter,0,num_packets);
+            send_data_packet((unsigned char*)plaintext.c_str(),key,sd,counter,SIZE_FILENAME);
         }
     }
     closedir(dir);
@@ -511,7 +511,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
         clean_socket(sd);
-        (*counter)++;
+        (*counter) += num_packets +1;;
         return;
     }
     free(request);
@@ -527,7 +527,6 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
 void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username, uint32_t num_packets){
     uint8_t id;
     std::string msg;
-    uint64_t file_len;
 
     id = 0; //ID ack
     msg = std::string("");
@@ -538,7 +537,6 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         id = 8; //ID di errore 
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
-        file_len = 0;
     }
     send_std_packet(msg,key,sd,counter,id,num_packets);
     std::string filename = (*username + "/" + (char*)plaintext).c_str();
@@ -630,7 +628,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             free(request);
             free(plaintext);
             clean_socket(sd);
-            (*counter)++;
+            (*counter) += num_packets +1;
             return;
         }
         free(request);
@@ -646,12 +644,67 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
 
 void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
 
+    uint8_t id;
+    std::string msg;
+    uint32_t num_packets = 0;
+
+    *(plaintext + SIZE_FILENAME -1) = '\0';
+    std::string old_filename = std::string((char*)plaintext);
+    if(!check_string(old_filename)){
+        id = 8;
+        msg = std::string("Filename non valido");
+        msg.resize(SIZE_FILENAME);
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+        return;
+    }
+    
+    FILE* file = fopen((*username + "/" + (char*)plaintext).c_str(),"r");
+    if(!file){
+        id = 8; //ID di errore 
+        msg = std::string("File non esistente");
+        msg.resize(SIZE_FILENAME);
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+        return;
+    }
+
+    id = 0; //ID ack
+    msg = std::string("");
+    msg.resize(SIZE_FILENAME);
+    fclose(file);
+    free(plaintext);
+    send_std_packet(msg,key,sd,counter,id,num_packets);
+
+
+    uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
+    unsigned char* new_filename = receive_data_packet(sd,counter,key,plaintext_len);
+    if(!new_filename){
+        free(plaintext_len);
+        clean_socket(sd);
+        (*counter)++;
+        return;
+    }
+    *(new_filename + *plaintext_len - 1) = '\0';
+    std::string new_filename_string = std::string((char*)new_filename);
+    if(!check_string(new_filename_string)){
+        id = 8;
+        msg = std::string("Filename non valido");
+    }
+    else if(rename( (*username + "/" + old_filename).c_str() ,(*username + "/" + new_filename_string).c_str())){
+        id = 8;
+        msg = std::string("Impossibile rinominare il file");
+    }
+    else{
+        id = 7;
+        msg = std::string("");
+    }
+    msg.resize(SIZE_FILENAME);
+    send_std_packet(msg,key,sd,counter,id,num_packets);
+    return;
 }
 
 void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
     uint8_t id;
     std::string msg;
-    uint64_t file_len;
     uint32_t num_packets = 0;
 
     //controllo se il filename ricevuto sia consistente
@@ -660,7 +713,6 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         id = 8; //ID di errore 
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
-        file_len = 0;
         send_std_packet(msg,key,sd,counter,id,num_packets); //in caso non lo sia invio un pacchetto di errore
         return;
     }
@@ -670,12 +722,12 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         id = 8; //ID di errore 
         msg = std::string("File non esistente");
         msg.resize(SIZE_FILENAME);
-        file_len = 0;
         send_std_packet(msg,key,sd,counter,id,num_packets); //in caso non lo sia invio un pacchetto di errore
         return;
     }
     else {
         msg = "";
+        msg.resize(SIZE_FILENAME);
         id = 0; // ACK
         send_std_packet(msg,key,sd,counter,id,num_packets);
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
@@ -694,7 +746,7 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
             free(request);
             free(plaintext);
             clean_socket(sd);
-            (*counter)++;
+            (*counter) += num_packets +1;
             return;
         }
         free(request);
@@ -715,6 +767,7 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
             msg.resize(SIZE_FILENAME);
             std::cout<<"Delete completata"<<std::endl;
             send_std_packet(msg,key,sd,counter,id,num_packets);
+            free(plaintext);
             return;
         }
     }
@@ -747,7 +800,7 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
             free(request);
             free(plaintext);
             clean_socket(sd);
-            (*counter)++;
+            (*counter) += num_packets +1;
             return;
         }
         free(request);
