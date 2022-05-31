@@ -533,6 +533,7 @@ unsigned char* handshake(int sd){
     ***********************************************************/ 
 }
 
+//ritorna Y=2 o N=1 (ERR = 0)
 uint32_t select_yesno() {
     std::cout<<"Eliminare definitivamente il file? [Y/n] ";
     std::string buffer;
@@ -585,7 +586,9 @@ uint32_t select_operation() {
 void list(int sd, unsigned char* key, uint64_t* counter){
     uint8_t id = 1;
     uint32_t num_packets = 0;
-    send_std_packet("", key,sd,counter,id,num_packets);
+    std::string msg = "";
+    msg.resize(SIZE_FILENAME);
+    send_std_packet(msg, key,sd,counter,id,num_packets);
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
         return;
@@ -740,7 +743,6 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
-        free(plaintext);
         clean_socket(sd);
         (*counter) += num_packets +1;
         return;
@@ -989,11 +991,11 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
     if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
-        free(plaintext);
         clean_socket(sd);
         (*counter) += num_packets +1;
         return;
     }
+    free(req_payload);
     free(request);
     if(id != 7){
         //Implementa invio errore da client
@@ -1005,7 +1007,105 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
 }
 
 void logout(int sd, unsigned char* key, uint64_t* counter){
-    
+
+    uint8_t id = 6;
+    uint32_t num_packets = 0;
+    std::string msg = "";
+    msg.resize(SIZE_FILENAME);
+
+    //invio la richiesta di logout
+    send_std_packet(msg, key,sd,counter,id,num_packets);
+
+    //ricevo la risposta dal server
+    unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!response){
+        return;
+    }
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        std::cout<<"Errore nella malloc\n";
+        free(response);
+        return;
+    }
+    if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(response);
+        free(plaintext);
+        clean_socket(sd);
+        (*counter) += num_packets + 1;
+        return;
+    }
+    plaintext[SIZE_FILENAME - 1] = '\0';
+    free(response);
+
+    if(id == 8){
+        std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        return;
+    }
+
+    if(id != 0){
+        std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        return;
+    }
+    free(plaintext);
+
+    //chiedo conferma all'utente e invio la richiesta corrispondente al server ( id == 8 --> logout annullato )
+    uint32_t yesno = 0;
+    while (yesno == 0) {
+        yesno = select_yesno();
+    }
+    if (yesno == 1) { // NO
+        msg = "Logout annullato";
+        msg.resize(SIZE_FILENAME);
+        id = 8;
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+        std::cout<<"Logout annullato\n";
+        return;
+    }
+    else if (yesno == 2) { // YES
+        msg = "";
+        msg.resize(SIZE_FILENAME);
+        id = 0;
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+    }
+    else { // ERROR
+        msg = "Errore sconosciuto";
+        msg.resize(SIZE_FILENAME);
+        id = 8;
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+        return;
+    }
+
+    //aspetto il messaggio DONE dal server
+    unsigned char* request = wait_for_done(sd);
+    if(!request){
+        std::cout<<"Logout non riuscito\n"<<std::endl;
+        return;
+    }
+    unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!req_payload){
+        std::cout<<"Errore nella malloc\n";
+        free(request);
+        return;
+    }
+    if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(request);
+        clean_socket(sd);
+        (*counter) += num_packets +1;
+        return;
+    }
+    free(request);
+    free(req_payload);
+    if(id != 7){
+        std::cout<<"Logout non riuscito\n";
+        return;
+    }
+    std::cout<<"Logout eseguito!\n";
+    free(key);
+    free(counter);
+    exit(0);
+    return;
 }
 
 void operation(int sd, unsigned char* key) {
