@@ -775,6 +775,57 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
 
 void logout(unsigned char* key, int sd,uint64_t* counter){
 
+    uint8_t id = 0;
+    std::string msg = "";
+    uint32_t num_packets = 0;
+    msg.resize(SIZE_FILENAME);
+    send_std_packet(msg,key,sd,counter,id,num_packets);
+
+    //aspetto la conferma dal client
+    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!request){
+        std::cout<<"Errore nella ricezione della richiesta\n";
+        return;
+    }
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        free(request);
+        std::cout<<"Errore nella malloc\n";
+        return;
+    }
+    if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(request);
+        free(plaintext);
+        clean_socket(sd);
+        (*counter) += num_packets +1;
+        return;
+    }
+    free(request);
+    plaintext[SIZE_FILENAME -1] = '\0';
+    if(id == 8){
+        std::cout<<(char*)plaintext<<std::endl;
+        free(plaintext);
+        return;
+    }
+
+    if( id != 0){
+        std::cout<<"Pacchetto non riconosciuto\n";
+        return;
+    }
+
+    free(plaintext);
+    
+    //mando pacchetto DONE
+    id = 7;
+    num_packets = 0;
+    msg = "";
+    msg.resize(SIZE_FILENAME);
+    send_std_packet(msg,key,sd,counter,id,num_packets);
+    free(counter);
+    free(key);
+    disconnect(sd);
+
 }
 
 void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* username){
