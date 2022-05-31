@@ -527,14 +527,36 @@ unsigned char* handshake(int sd){
         exit(1);
     }
     std::cout<<"Connessione con il server completata\n";
-    std::cout<<"-------------------\n";
     return K_ab;
     /*********************************************************
     7) la sessione con il server e' stata stabilita ed e' autentica e verificata! 
     ***********************************************************/ 
 }
 
+uint32_t select_yesno() {
+    std::cout<<"Eliminare definitivamente il file? [Y/N]\n";
+    std::string buffer;
+    std::getline(std::cin, buffer);
+    std::cin>>buffer;
+    static char ok_chars[] = "YNyn";
+    if(buffer.find_first_not_of(ok_chars) != std::string::npos){
+        std::cout<<"Input non valido\n";
+        return 0;
+    }
+    else if(buffer == "N" || buffer == "n") {
+        return 1;
+    }
+    else if(buffer == "Y" || buffer == "y") {
+        return 2;
+    } 
+    else {
+        std::cout<<"Input non valido\n";
+        return 0;
+    }
+}
+
 uint32_t select_operation() {
+    std::cout<<"-------------------\n";
     std::cout<<"Operazioni disponibili:\n";
     std::cout<<"[1]: List\n";
     std::cout<<"[2]: Upload\n";
@@ -629,8 +651,14 @@ void list(int sd, unsigned char* key, uint64_t* counter){
 
     std::cout<<"-------------------\n";
     std::cout<<list;
-    std::cout<<"-------------------\n";
     free(plaintext);
+
+    //invio messaggio DONE
+    list = std::string("");
+    list.resize(SIZE_FILENAME);
+    id = 7; //ID di done
+    num_packets = 0;
+    send_std_packet(list, key,sd,counter,id,num_packets);
     return;
 }
 
@@ -709,13 +737,15 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Uh oh..."<<std::endl;
         return;
     }
+    
+    //dovrei ricevere pacchetto richiesta DONE
+    //parametri da leggere nel pacchetto di richiesta
     unsigned char* request = wait_for_done(sd);
     if(!request){
         std::cout<<"Upload failed\n"<<std::endl;
         return;
     }
-    //dovrei ricevere pacchetto richiesta DONE
-    //parametri da leggere nel pacchetto di richiesta
+    
     unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
     if(!req_payload){
         std::cout<<"Errore nella malloc\n";
@@ -738,7 +768,6 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     }
     std::cout<<std::endl;
     std::cout<<"Upload completato!\n";
-    std::cout<<"-------------------\n";
     return;
 //////////////////////////////////////////////////////
 // IMPLEMENTARE UNA SPECIE DI TIMER PER VEDERE SE RICEVO IL PACCHETTO DONE ENTRO TOT TEMPO
@@ -796,7 +825,6 @@ void download(int sd, unsigned char* key, uint64_t* counter){
 
     std::cout<<std::endl;
     std::cout<<"Download completato!\n";
-    std::cout<<"-------------------\n";
 
     //invio messaggio DONE
     filename = std::string("");
@@ -863,7 +891,107 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
 }
 
 void delete_file(int sd, unsigned char* key, uint64_t* counter){
+    //chiedo all'utente che file vuole eliminare
+    std::cout<<"Inserisci il nome del file da eliminare: ";
+    std::string filename;
+    std::cin>>filename;
 
+    //controllo se il nome del file è valido 
+    if(!check_string(filename))
+        return;
+
+    filename.resize(SIZE_FILENAME);
+
+    uint8_t id = 5;
+    uint32_t num_packets = 0;
+    send_std_packet(filename, key,sd,counter,id,num_packets); //invio richiesta standard per effettuare una delete di dimensione num_packets
+
+
+    //ricevo il pacchetto di risposta 
+    unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!response){
+        return;
+    }
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        std::cout<<"Errore nella malloc\n";
+        free(response);
+        return;
+    }
+    if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(response);
+        free(plaintext);
+        return;
+    }
+    plaintext[SIZE_FILENAME - 1] = '\0';
+    free(response);
+
+    if(id == 8){ //ricevuto errore
+        std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        return;
+    }
+    else if(id != 0){
+        std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        return;
+    }
+    free(plaintext);
+
+    uint32_t yesno = 0;
+    while (yesno == 0) {
+        yesno = select_yesno();
+    }
+    if (yesno == 1) { // NO
+        filename = "";
+        filename.resize(SIZE_FILENAME);
+        id = 8;
+        send_std_packet(filename,key,sd,counter,id,num_packets);
+        std::cout<<"Delete annullata\n";
+        return;
+    }
+    else if (yesno == 2) { // YES
+        filename = "";
+        filename.resize(SIZE_FILENAME);
+        id = 0;
+        send_std_packet(filename,key,sd,counter,id,num_packets);
+    }
+    else { // ERROR
+        filename = "Errore sconosciuto";
+        filename.resize(SIZE_FILENAME);
+        id = 8;
+        send_std_packet(filename,key,sd,counter,id,num_packets);
+        return;
+    }
+
+    //dovrei ricevere pacchetto richiesta DONE
+    //parametri da leggere nel pacchetto di richiesta
+    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!request){
+        std::cout<<"Delete failed\n"<<std::endl;
+        return;
+    }
+    unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!req_payload){
+        std::cout<<"Errore nella malloc\n";
+        free(request);
+        return;
+    }
+    if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(request);
+        free(plaintext);
+        clean_socket(sd);
+        (*counter)++;
+        return;
+    }
+    free(request);
+    if(id != 7){
+        //Implementa invio errore da client
+        std::cout<<"Errore: il server non ha eliminato il file\n";
+        return;
+    }
+    std::cout<<"File eliminato!\n";
+    return;
 }
 
 void logout(int sd, unsigned char* key, uint64_t* counter){

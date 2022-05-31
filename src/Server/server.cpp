@@ -470,7 +470,6 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         send_std_packet(plaintext,key,sd,counter,id,1);
         return;
     }
-    char* buffer;
     while ((dirent = readdir(dir)) != NULL) {
         num_packets++;
     }
@@ -492,6 +491,36 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         }
     }
     closedir(dir);
+
+
+    //dovrei ricevere pacchetto richiesta DONE
+    //parametri da leggere nel pacchetto di richiesta
+
+    unsigned char* request = wait_for_done(sd);
+    if(!request){
+        std::cout<<"List failed\n"<<std::endl;
+        return;
+    }
+    unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!req_payload){
+        std::cout<<"Errore nella malloc\n";
+        free(request);
+        return;
+    }
+    if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(request);
+        clean_socket(sd);
+        (*counter)++;
+        return;
+    }
+    free(request);
+    if(id != 7){
+        //Implementa invio errore da client
+        std::cout<<"Errore: il client non ha ricevuto la list\n";
+        return;
+    }
+    std::cout<<"Invio list completato!\n";
     return;
 }
 
@@ -520,7 +549,6 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 
     std::cout<<std::endl;
     std::cout<<"Upload completato!\n";
-    std::cout<<"-------------------\n";
 
     //invio messaggio DONE
     filename = std::string("");
@@ -612,7 +640,6 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             return;
         }
         std::cout<<"Download completato!\n";
-        std::cout<<"-------------------\n";
         return;
     }
 }
@@ -622,7 +649,75 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 }
 
 void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
+    uint8_t id;
+    std::string msg;
+    uint64_t file_len;
+    uint32_t num_packets = 0;
 
+    //controllo se il filename ricevuto sia consistente
+    *(plaintext + SIZE_FILENAME -1 ) = '\0';
+    if(!check_string(std::string((char*)plaintext))){
+        id = 8; //ID di errore 
+        msg = std::string("Filename non valido");
+        msg.resize(SIZE_FILENAME);
+        file_len = 0;
+        send_std_packet(msg,key,sd,counter,id,num_packets); //in caso non lo sia invio un pacchetto di errore
+        return;
+    }
+    //in caso lo ha trovato vado ad aprire il file per controllarne la sua esistenza nel server
+    FILE* file = fopen((*username + "/" + (char*)plaintext).c_str(),"r");
+    if(!file){ //se non esiste mando il messaggio di errore 
+        id = 8; //ID di errore 
+        msg = std::string("File non esistente");
+        msg.resize(SIZE_FILENAME);
+        file_len = 0;
+        send_std_packet(msg,key,sd,counter,id,num_packets); //in caso non lo sia invio un pacchetto di errore
+        return;
+    }
+    else {
+        msg = "";
+        id = 0; // ACK
+        send_std_packet(msg,key,sd,counter,id,num_packets);
+        unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+        if(!request){
+            std::cout<<"Delete failed\n"<<std::endl;
+            return;
+        }
+        unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
+        if(!req_payload){
+            std::cout<<"Errore nella malloc\n";
+            free(request);
+            return;
+        }
+        if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
+            std::cout<<"Impossibile leggere correttamente la richiesta\n";
+            free(request);
+            free(plaintext);
+            clean_socket(sd);
+            (*counter)++;
+            return;
+        }
+        free(request);
+        if(id != 0){
+            std::cout<<"Delete annullata\n";
+            return;
+        }
+        else {
+            msg = "";
+            if(remove((*username + "/" + (char*)plaintext).c_str()) != 0) {
+                msg="Impossibile rimuovere il file";
+                msg.resize(SIZE_FILENAME);
+                id = 8;
+                send_std_packet(msg,key,sd,counter,id,num_packets);
+                return;
+            }
+            id = 7;
+            msg.resize(SIZE_FILENAME);
+            std::cout<<"Delete completata"<<std::endl;
+            send_std_packet(msg,key,sd,counter,id,num_packets);
+            return;
+        }
+    }
 }
 
 void logout(unsigned char* key, int sd,uint64_t* counter){
@@ -631,6 +726,7 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
 
 void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* username){
     while(true) {
+        std::cout<<"-------------------\n";
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
         if(!request){
             std::cout<<"Errore nella ricezione della richiesta\n";
