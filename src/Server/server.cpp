@@ -459,6 +459,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
 void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     uint8_t id;
     std::string plaintext;
+    uint32_t num_packets = 0;
     struct dirent *dirent;
     DIR *dir;
     dir = opendir((*username + "/").c_str());
@@ -471,19 +472,26 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     }
     char* buffer;
     while ((dirent = readdir(dir)) != NULL) {
-        plaintext = plaintext.append("└── " + (std::string)dirent->d_name + "\n");
+        num_packets++;
     }
-    if(!plaintext.empty()) {
-        plaintext.erase(0,10);
-    }
-    if(!plaintext.empty()) {
-        plaintext.resize(plaintext.size()-13);
+    send_std_packet(plaintext,key,sd,counter,0,num_packets);
+    rewinddir(dir);
+    for (int i = 0; i < num_packets; i++) {
+        if ((dirent = readdir(dir)) != NULL) {
+            if(i==0) {
+                plaintext = (std::string)dirent->d_name + "\n";
+            }
+            else if (i == num_packets-1) {
+                plaintext = "└── " + (std::string)dirent->d_name + "\n";
+            }
+            else {
+                plaintext = "├── " + (std::string)dirent->d_name + "\n";
+            }
+            plaintext.resize(SIZE_FILENAME);
+            send_std_packet(plaintext,key,sd,counter,0,num_packets);
+        }
     }
     closedir(dir);
-    free(dirent);
-    plaintext.resize(SIZE_FILENAME);
-    // considerare la possibilita' che la dimensione della lista maggiore sia di 255 byte?
-    send_std_packet(plaintext,key,sd,counter,0,1);
     return;
 }
 
