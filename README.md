@@ -41,7 +41,8 @@ cd Progetto-AC/src/
 
 5. Compila ed esegui il client ed il server automaticamente:
 ```bash
-./compile
+ch
+./compile.sh
 ```
 
 In alternativa, per compilare ed eseguire manualmente:
