@@ -594,8 +594,41 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
         return;
     }
+    std::string list;
+    for(uint32_t i = 0; i < num_packets; i++){
+        unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+        if(!response){
+            return;
+        }
+        unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+        if(!plaintext){
+            std::cout<<"Errore nella malloc\n";
+            free(response);
+            return;
+        }
+        
+        if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+            std::cout<<"Impossibile leggere correttamente la richiesta\n";
+            free(response);
+            free(plaintext);
+            return;
+        }
+        plaintext[SIZE_FILENAME - 1] = '\0';
+        free(response);
+
+        if(id == 8){ //ricevuto errore
+            std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+            return;
+        }
+        else if(id != 0){
+            std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+            return;
+        }
+        list = list.append((char*)plaintext);
+    }
+
     std::cout<<"-------------------\n";
-    std::cout<<plaintext;
+    std::cout<<list;
     std::cout<<"-------------------\n";
     free(plaintext);
     return;
@@ -775,7 +808,58 @@ void download(int sd, unsigned char* key, uint64_t* counter){
 }
 
 void rename(int sd, unsigned char* key, uint64_t* counter){
+    
+    std::cout<<"Inserisci il nome del file da rinominare: ";
+    std::string old_filename;
+    std::cin>>old_filename;
+    if(!check_string(old_filename))
+        return;
+    
+    old_filename.resize(SIZE_FILENAME);
+    uint8_t id = 4;
+    uint32_t num_packets = 1;
+    //invio il pacchetto standard per la richiesta di RENAME
+    send_std_packet(old_filename,key,sd,counter,id,num_packets);
 
+    //leggo la risposta del server
+    unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(response){
+        return;
+    }
+    unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!plaintext){
+        std::cout<<"Errore nella malloc\n";
+        free(response);
+        return;
+    }
+    if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(response);
+        free(plaintext);
+        clean_socket(sd);
+        (*counter)++;
+        return;
+    }
+    plaintext[SIZE_FILENAME - 1] = '\0';
+    free(response);
+    if(id == 8){ //ricevuto errore
+        std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        return;
+    }
+    else if(id != 0){
+        std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        return;
+    }
+    free(plaintext);
+    
+    std::cout<<"Inserire il nome con cui rinominare il file: ";
+    std::string new_filename;
+    std::cin>>new_filename;
+
+    if(!check_string(new_filename))
+        return;
+
+    send_data_packet((unsigned char*)new_filename.c_str(),key,sd,counter,new_filename.length()+1);
 }
 
 void delete_file(int sd, unsigned char* key, uint64_t* counter){
