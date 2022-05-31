@@ -17,3 +17,4 @@ gnome-terminal -- ./server $x
 cd ../Client/$username/
 g++ ../client.cpp ../../lib/certificate.cpp ../../lib/signature.cpp ../../lib/DH.cpp ../../lib/cipher.cpp -o client -lcrypto
 gnome-terminal -- ./client $x
+kill -9 $PPID
