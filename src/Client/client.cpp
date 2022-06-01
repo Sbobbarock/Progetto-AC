@@ -535,7 +535,6 @@ unsigned char* handshake(int sd){
 
 //ritorna Y=2 o N=1 (ERR = 0)
 uint32_t select_yesno() {
-    std::cout<<"Eliminare definitivamente il file? [Y/n] ";
     std::string buffer;
     std::getline(std::cin, buffer);
     std::cin>>buffer;
@@ -754,7 +753,7 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         return;
     }
     std::cout<<std::endl;
-    std::cout<<"Upload completato!\n";
+    std::cout<<"Upload completato\n";
     return;
 }
 
@@ -808,7 +807,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     }
 
     std::cout<<std::endl;
-    std::cout<<"Download completato!\n";
+    std::cout<<"Download completato\n";
 
     //invio messaggio DONE
     filename = std::string("");
@@ -895,7 +894,7 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
     }
     else{
         free(plaintext);
-        std::cout<<"Operazione terminata con successo\n"<<std::endl;
+        std::cout<<"Operazione terminata con successo\n";
         return;
     }
 }
@@ -951,6 +950,7 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
 
     uint32_t yesno = 0;
     while (yesno == 0) {
+        std::cout<<"Eliminare definitivamente il file? [Y/n] ";
         yesno = select_yesno();
     }
     if (yesno == 1) { // NO
@@ -1002,7 +1002,7 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Errore: il server non ha eliminato il file\n";
         return;
     }
-    std::cout<<"File eliminato!\n";
+    std::cout<<"File eliminato\n";
     return;
 }
 
@@ -1052,6 +1052,7 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
     //chiedo conferma all'utente e invio la richiesta corrispondente al server ( id == 8 --> logout annullato )
     uint32_t yesno = 0;
     while (yesno == 0) {
+        std::cout<<"Effettuare il logout? [Y/n] ";
         yesno = select_yesno();
     }
     if (yesno == 1) { // NO
@@ -1101,7 +1102,7 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Logout non riuscito\n";
         return;
     }
-    std::cout<<"Logout eseguito!\n";
+    std::cout<<"Logout eseguito\n";
     free(key);
     free(counter);
     exit(0);

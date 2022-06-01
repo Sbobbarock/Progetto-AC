@@ -520,7 +520,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         std::cout<<"Errore: il client non ha ricevuto la list\n";
         return;
     }
-    std::cout<<"Invio list completato!\n";
+    std::cout<<"Invio list completato\n";
     return;
 }
 
@@ -546,7 +546,7 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     }
 
     std::cout<<std::endl;
-    std::cout<<"Upload completato!\n";
+    std::cout<<"Upload completato\n";
 
     //invio messaggio DONE
     filename = std::string("");
@@ -637,7 +637,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             std::cout<<"Errore: il client non ha ricevuto il file\n";
             return;
         }
-        std::cout<<"Download completato!\n";
+        std::cout<<"Download completato\n";
         return;
     }
 }
@@ -699,6 +699,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     }
     msg.resize(SIZE_FILENAME);
     send_std_packet(msg,key,sd,counter,id,num_packets);
+    std::cout<<"Rename completata"<<std::endl;
     return;
 }
 
@@ -822,6 +823,7 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
     msg = "";
     msg.resize(SIZE_FILENAME);
     send_std_packet(msg,key,sd,counter,id,num_packets);
+    std::cout<<"Logout completato"<<std::endl;
     free(counter);
     free(key);
     disconnect(sd);
