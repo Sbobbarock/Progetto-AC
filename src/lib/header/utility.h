@@ -113,7 +113,7 @@ bool check_string(std::string s){
     static char ok_chars[] = "abcdefghijklmnopqrstuvwxyz"
                             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                             "1234567890."; 
-    if(s.find_first_not_of(ok_chars) != std::string::npos){
+    if(s.find_first_not_of(ok_chars) != std::string::npos || ( s.at(0) == '.' && s.at(1) == '.' ){
         std::cout<<"Stringa non valida\n";
         return false;
     }
