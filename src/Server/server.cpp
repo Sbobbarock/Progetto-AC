@@ -538,7 +538,12 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
     }
-    send_std_packet(msg,key,sd,counter,id,num_packets);
+    if(num_packets > UINT32_MAX/MAX_PAYLOAD_SIZE){
+        std::cout<<"Tentativo di inviare un file più grande di 4GB\n";
+        //DEVE FARE LA DISCONNESSIONE!
+        return;
+    }
+    send_std_packet(msg,key,sd,counter,id,0);
     std::string filename = (*username + "/" + (char*)plaintext).c_str();
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
@@ -583,9 +588,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         else{
             fseek(file,0,SEEK_END);
             file_len = (ftell(file) > UINT32_MAX)? 0: ftell(file);
-            rewind(file);
         
-            if(!file_len){
+            if(!file_len && ftell(file)){
                 id = 8;
                 msg = std::string("File troppo grande");
                 msg.resize(SIZE_FILENAME);
