@@ -669,9 +669,8 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     else{
         fseek(file,0,SEEK_END);
         file_len = (ftell(file) > UINT32_MAX)? 0: ftell(file);
-        rewind(file);
 
-        if(!file_len){
+        if(!file_len && ftell(file)){
             std::cout<<"File troppo grande"<<std::endl;
             return;
         }
