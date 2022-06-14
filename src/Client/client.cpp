@@ -1077,31 +1077,6 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
         return;
     }
 
-    //aspetto il messaggio DONE dal server
-    unsigned char* request = wait_for_done(sd);
-    if(!request){
-        std::cout<<"Logout non riuscito\n"<<std::endl;
-        return;
-    }
-    unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
-    if(!req_payload){
-        std::cout<<"Errore nella malloc\n";
-        free(request);
-        return;
-    }
-    if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
-        std::cout<<"Impossibile leggere correttamente la richiesta\n";
-        free(request);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
-        return;
-    }
-    free(request);
-    free(req_payload);
-    if(id != 7){
-        std::cout<<"Logout non riuscito\n";
-        return;
-    }
     std::cout<<"Logout eseguito\n";
     free(key);
     free(counter);
