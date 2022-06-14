@@ -817,12 +817,6 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
 
     free(plaintext);
     
-    //mando pacchetto DONE
-    id = 7;
-    num_packets = 0;
-    msg = "";
-    msg.resize(SIZE_FILENAME);
-    send_std_packet(msg,key,sd,counter,id,num_packets);
     std::cout<<"Logout completato"<<std::endl;
     free(counter);
     free(key);
