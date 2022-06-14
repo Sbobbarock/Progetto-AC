@@ -543,7 +543,7 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         //DEVE FARE LA DISCONNESSIONE!
         return;
     }
-    send_std_packet(msg,key,sd,counter,id,0);
+    send_std_packet(msg,key,sd,counter,id,num_packets);
     std::string filename = (*username + "/" + (char*)plaintext).c_str();
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
@@ -559,6 +559,7 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     id = 7; //ID di done
     num_packets = 0;
     send_std_packet(filename, key,sd,counter,id,num_packets);
+    return;
 }
 
 void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){

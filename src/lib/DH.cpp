@@ -104,7 +104,7 @@ unsigned char* DH_derive_session_secret(EVP_PKEY* my_privkey, EVP_PKEY* received
     }
     EVP_PKEY_derive(ctx_drv,secret,secret_len);
     EVP_PKEY_CTX_free(ctx_drv);
-    return  secret;
+    return secret;
 }
 
 

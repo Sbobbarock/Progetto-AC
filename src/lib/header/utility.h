@@ -23,14 +23,17 @@
 template<class T> 
 bool send_packet(int sd, T* msg, int len){
     int ret = 0;
+    int tmp = 0;
     do{
-        ret += send(sd,msg,len,0);
-        if(!ret)
+        tmp = send(sd,msg,len,0);
+        if(tmp == -1) {
             return false;
-    }while(ret < len); 
-
+        }
+        ret += tmp;
+        tmp = 0;
+    }
+    while(ret < len); 
     return true;
-    
 }
 
 template <class T>
@@ -135,7 +138,7 @@ void clean_socket(int sd){
     }
     fcntl(sd, F_SETFL, fcntl(sd, F_GETFL, 0));
     free(buffer);
-    std::cout<<"Ripristino completato\n";
+    std::cout<<"Ripristino completato";
     std::cout<<std::endl;
     return;
 }
@@ -288,7 +291,7 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
     }   
     if(received_count != *counter){
         std::cout<<"Counter errato\n";
-        std::cout<<received_count<<"   !=  "<<*counter<<std::endl;
+        std::cout<<received_count<<" != "<<*counter<<std::endl;
         return false;
     }
     (*counter)++;
@@ -401,6 +404,7 @@ unsigned char* receive_data_packet(int sd,uint64_t* counter,unsigned char* key,u
 
     if(received_count != *counter){
         std::cout<<"Errore: counter errato\n";
+        std::cout<<received_count<<" != "<<*counter<<std::endl;
         return NULL;
     }
     (*counter)++;

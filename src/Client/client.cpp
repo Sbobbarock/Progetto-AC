@@ -728,7 +728,7 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     //parametri da leggere nel pacchetto di richiesta
     unsigned char* request = wait_for_done(sd);
     if(!request){
-        std::cout<<"Upload failed\n"<<std::endl;
+        std::cout<<"Upload failed"<<std::endl;
         return;
     }
     
