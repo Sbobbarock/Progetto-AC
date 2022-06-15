@@ -31,6 +31,8 @@ unsigned char* handshake(int sd){
     //genero il nonce(C)
     nonce_c = (unsigned char*)malloc(NONCE_LEN);
     if(!nonce_c){
+        std::cout<<"Errore nell'allocazione del buffer nonce_c\n";
+        delete username;
         close(sd);
         exit(1);
     }
@@ -47,14 +49,16 @@ unsigned char* handshake(int sd){
 
     //invio nonce e nome utente
     if(!send_packet<const char>(sd,(*username).c_str(),MAX_USERNAME)){
-        std::cout<<"Errore nell'invio del nome utente\n";
+        std::cout<<"Errore nell'invio del nome utente al server\n";
         free(nonce_c);
+        delete username;
         close(sd);
         exit(1);
     }
     if(!send_packet<unsigned char>(sd,nonce_c, NONCE_LEN)){
-        std::cout<<"Errore nell'invio del nonce\n";
+        std::cout<<"Errore nell'invio del nonce al server\n";
         free(nonce_c);
+        delete username;
         close(sd);
         exit(1);
     }
@@ -65,6 +69,7 @@ unsigned char* handshake(int sd){
         std::cout<<"Nome utente non registrato\n";
         free(nonce_c);
         close(sd);
+        delete username;
         exit(1);
     }
     std::cout<<"Welcome "<<*username<<std::endl;
@@ -98,10 +103,11 @@ unsigned char* handshake(int sd){
     //genera dinamicamente il nome del file!
     len = (uint32_t*)malloc(sizeof(uint32_t));
     if(!len){
-        std::cout<<"Errore nella malloc()\n";
+        std::cout<<"Errore nell'allocazione di len\n";
         EVP_PKEY_free(my_DHprivkey);
         EVP_PKEY_free(my_DHpubkey);
         free(nonce_c);
+        delete username;
         close(sd);
         exit(1);
     }
@@ -115,6 +121,7 @@ unsigned char* handshake(int sd){
         free(nonce_c);
         free(len);
         close(sd);
+        delete username;
         exit(1);
     } 
     EVP_PKEY_free(my_DHpubkey);
@@ -129,6 +136,7 @@ unsigned char* handshake(int sd){
         free(my_DH_pubkeyPEM);
         free(len);
         close(sd);
+        delete username;
         exit(1);
     }
 
@@ -140,6 +148,7 @@ unsigned char* handshake(int sd){
         free(my_DH_pubkeyPEM);
         free(len);
         close(sd);
+        delete username;
         exit(1);
     }
     free(len);
@@ -167,6 +176,7 @@ unsigned char* handshake(int sd){
         free(nonce_c);
         free(my_DH_pubkeyPEM);
         close(sd);
+        delete username;
         exit(1);
     }
     *server_DH_pubkeyLEN = ntohl(*server_DH_pubkeyLEN);
@@ -183,6 +193,7 @@ unsigned char* handshake(int sd){
         free(server_DH_pubkeyLEN);
         free(my_DH_pubkeyPEM);
         close(sd);
+        delete username;
         exit(1);
     }
     
@@ -197,6 +208,7 @@ unsigned char* handshake(int sd){
         free(server_DH_pubkeyLEN);
         free(my_DH_pubkeyPEM);
         close(sd);
+        delete username;
         exit(1);
     }
     /*************************************************************************************************************************/
@@ -227,6 +239,7 @@ unsigned char* handshake(int sd){
         free(my_DH_pubkeyPEM);
         EVP_PKEY_free(server_pubkey);
         close(sd);
+        delete username;
         exit(1);
     }
     EVP_PKEY_free(server_pubkey);
@@ -243,6 +256,7 @@ unsigned char* handshake(int sd){
         free(server_DH_pubkeyLEN);
         free(my_DH_pubkeyPEM);
         close(sd);
+        delete username;
         exit(1);
     }
     free(secret);
@@ -272,12 +286,14 @@ unsigned char* handshake(int sd){
     //ricevo la dimensione della firma del server
     uint32_t* sign_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
     if(!sign_len){
+        std::cout<<"Errore nella ricezione di sign_len\n";
         free(nonce_c);
         free(K_ab);
         free(server_DH_pubkeyPEM);
         free(server_DH_pubkeyLEN);
         free(my_DH_pubkeyPEM);
         close(sd);
+        delete username;
         exit(1);
     }
     *sign_len = ntohl(*sign_len);
@@ -285,6 +301,7 @@ unsigned char* handshake(int sd){
     //ricevo la firma del server
     unsigned char* server_signature = recv_packet<unsigned char>(sd,*sign_len);
     if(!server_signature){
+        std::cout<<"Errore nella ricezione della firma digitale del server\n";
         free(nonce_c);
         free(K_ab);
         free(server_DH_pubkeyPEM);
@@ -292,6 +309,7 @@ unsigned char* handshake(int sd){
         free(my_DH_pubkeyPEM);
         free(sign_len);
         close(sd);
+        delete username;
         exit(1);
     }
 
@@ -299,6 +317,8 @@ unsigned char* handshake(int sd){
     //ricevo la dimensione del certificato del server
     uint32_t* cert_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
     if(!cert_len){
+        std::cout<<"Errore nella ricezione del certificato del server\n";
+        delete username;
         free(nonce_c);
         free(K_ab);
         free(server_DH_pubkeyPEM);
@@ -315,6 +335,8 @@ unsigned char* handshake(int sd){
     //ricevo il certificato del server
     unsigned char* server_cert_msg = recv_packet<unsigned char>(sd,*cert_len);
     if(!server_cert_msg){
+        std::cout<<"Errore nella ricezione del certificato del server\n";
+        delete username;
         free(nonce_c);
         free(K_ab);
         free(server_DH_pubkeyPEM);
@@ -330,6 +352,8 @@ unsigned char* handshake(int sd){
     //leggo il certificato del server
     X509* server_certificate = read_certificate(std::string("Server_cert.pem"), server_cert_msg,*cert_len);
     if(!server_certificate){
+        std::cout<<"Errore nella lettura del certificato del server\n";
+        delete username;
         free(nonce_c);
         free(K_ab);
         free(server_DH_pubkeyPEM);
@@ -349,6 +373,8 @@ unsigned char* handshake(int sd){
     //costruisco lo store dei certificati e verifico il certificato
     X509_STORE* store = build_store(std::string("CA_crl.pem"),std::string("CA_root.pem"));
     if(!store){
+        std::cout<<"Errore nella creazione dello STORE\n";
+        delete username;
         free(nonce_c);
         X509_free(server_certificate);
         free(K_ab);
@@ -367,6 +393,7 @@ unsigned char* handshake(int sd){
     if(!server_RSApubkey){
         std::cout<<"Certificato non corretto\n";
         free(nonce_c);
+        delete username;
         X509_free(server_certificate);
         free(K_ab);
         free(server_DH_pubkeyPEM);
@@ -386,6 +413,8 @@ unsigned char* handshake(int sd){
     //preparo il msg per verificare la firma
     unsigned char* signed_msg = (unsigned char*)malloc(NONCE_LEN + * server_DH_pubkeyLEN);
     if(!signed_msg){
+        std::cout<<"Errore nell'allocazione di memoria per la firma digitale\n";
+        delete username;
         EVP_PKEY_free(server_RSApubkey);
         free(nonce_c);
         free(K_ab);
@@ -407,6 +436,7 @@ unsigned char* handshake(int sd){
     //verifico la firma del server. Per verificarla utilizzo la chiave pubblica del server RSA!
     if(!verify_signature(EVP_sha256(),server_signature, *sign_len, server_RSApubkey,signed_msg, signed_msg_len)){
         std::cout<<"FIRMA NON VALIDA\n";
+        delete username;
         EVP_PKEY_free(server_RSApubkey);
         free(K_ab);
         free(my_DH_pubkeyPEM);
@@ -440,6 +470,8 @@ unsigned char* handshake(int sd){
     //ricevo il nonce_s
     unsigned char* nonce_s = recv_packet<unsigned char>(sd,NONCE_LEN);
     if(!nonce_s){
+        std::cout<<"Errore nella ricezione di nonce_s\n";
+        delete username;
         free(K_ab);
         free(my_DH_pubkeyPEM);
         free(sign_len);
@@ -452,6 +484,8 @@ unsigned char* handshake(int sd){
     free(signed_msg);
     signed_msg = (unsigned char*)malloc(NONCE_LEN + my_DHpubkeyLEN);
     if(!signed_msg){
+        std::cout<<"Errore nell'allocazione del messaggio firmato\n";
+        delete username;
         free(K_ab);
         free(my_DH_pubkeyPEM);
         free(sign_len);
@@ -469,6 +503,8 @@ unsigned char* handshake(int sd){
     //leggo la chiave privata RSA del client 
     EVP_PKEY* my_privkeyRSA = read_RSA_privkey(std::string("rsa_priv_client.pem"));
     if(!my_privkeyRSA){
+        std::cout<<"Errore nella lettura della chiave RSA privata\n";
+        delete username;
         free(K_ab);
         free(sign_len);
         free(signed_msg);
@@ -480,6 +516,8 @@ unsigned char* handshake(int sd){
     //firmo nonce_s e my_DHpubkey
     unsigned char* client_signature = compute_signature(EVP_sha256(), signed_msg, NONCE_LEN+my_DHpubkeyLEN, my_privkeyRSA,sign_len);
     if(!client_signature){
+        std::cout<<"Errore nella firma digitale\n";
+        delete username;
         EVP_PKEY_free(my_privkeyRSA);
         free(K_ab);
         free(sign_len);
@@ -492,6 +530,8 @@ unsigned char* handshake(int sd){
 
     *sign_len = htonl(*sign_len);
     if(!send_packet<uint32_t>(sd,sign_len,sizeof(uint32_t))){
+        std::cout<<"Errore di invio del pacchetto\n";
+        delete username;
         free(K_ab);
         free(sign_len);
         free(client_signature);
@@ -500,6 +540,8 @@ unsigned char* handshake(int sd){
     }
     *sign_len = ntohl(*sign_len);
     if(!send_packet<unsigned char>(sd,client_signature, *sign_len)){
+        std::cout<<"Errore di invio del pacchetto\n";
+        delete username;
         free(K_ab);
         free(sign_len);
         free(client_signature);
@@ -512,21 +554,28 @@ unsigned char* handshake(int sd){
 
     //elimino le chiavi effimere che non verranno piu' utilizzate durante lo scambio di messaggi tra client e server
     if(remove((std::string("dh_serverpubkey.pem")).c_str())){
+        std::cout<<"Impossibile eliminare il file effimero\n";
+        delete username;
         free(K_ab);
         close(sd);
         exit(1);
     }
     if(remove((std::string("dh_myPUBKEY.pem")).c_str())){
+        std::cout<<"Impossibile eliminare il file effimero\n";
+        delete username;
         free(K_ab);
         close(sd);
         exit(1);
     }
     if(remove((std::string("Server_cert.pem")).c_str())){
+        std::cout<<"Impossibile eliminare il file effimero\n";
+        delete username;
         free(K_ab);
         close(sd);
         exit(1);
     }
     std::cout<<"Connessione con il server completata\n";
+    delete username;
     return K_ab;
     /*********************************************************
     7) la sessione con il server e' stata stabilita ed e' autentica e verificata! 
@@ -605,16 +654,20 @@ void list(int sd, unsigned char* key, uint64_t* counter){
     msg.resize(SIZE_FILENAME);
 
     //creo una richiesta standard di list 
-    send_std_packet(msg, key,sd,counter,id,num_packets);
+    if(!send_std_packet(msg, key,sd,counter,id,num_packets)){
+        std::cout<<"L'operazione non è terminata con successo\n";
+        return;
+    }
 
     //ricevo la risposta dal server 
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
+        std::cout<<"Errore nella ricezione della risposta dal server\n";
         return;
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
-        std::cout<<"Errore nella malloc\n";
+        std::cout<<"Errore nell'allocazione di memoria per il plaintext\n";
         free(response);
         return;
     }
@@ -640,6 +693,7 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
         return;
     }
+    free(plaintext);
     std::string list;
     uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
 
@@ -658,7 +712,7 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         list = list.append((char*)plaintext);
         free(plaintext);
     }
-
+    free(plaintext_len);
     std::cout<<"-------------------\n";
     std::cout<<list;
 
@@ -669,7 +723,10 @@ void list(int sd, unsigned char* key, uint64_t* counter){
     num_packets = 0;
 
     //invio un pacchetto standard di done
-    send_std_packet(list, key,sd,counter,id,num_packets);
+    if(!send_std_packet(list, key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio del pacchetto DONE\n";
+        return;
+    }
     return;
 }
 
@@ -720,17 +777,21 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     num_packets = 0;
     num_packets = how_many_fragments(file_len);
 
-    //invio un pacchetto di richiesta stadnard di upload
-    send_std_packet(filename, key,sd,counter,id,num_packets);
+    //invio un pacchetto di richiesta standard di upload
+    if(!send_std_packet(filename, key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio del pacchetto standard\n";
+        return;
+    }
 
     //ricevo la risposta dal server 
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
+        std::cout<<"Errore nella ricezione della risposta dal server\n";
         return;
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
-        std::cout<<"Errore nella malloc\n";
+        std::cout<<"Errore nell'allocazione di memoria per il plaintext\n";
         free(response);
         return;
     }
@@ -768,13 +829,13 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     //attendo al ricezione del pacchetto done
     unsigned char* request = wait_for_done(sd);
     if(!request){
-        std::cout<<"Upload failed"<<std::endl;
+        std::cout<<"Upload fallita"<<std::endl;
         return;
     }
     
     unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
     if(!req_payload){
-        std::cout<<"Errore nella malloc\n";
+        std::cout<<"Errore nell'allocazione di memoria\n";
         free(request);
         return;
     }
@@ -783,12 +844,13 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
+        free(req_payload);
         clean_socket(sd);
         (*counter) += num_packets +1;
         return;
     }
     free(request);
-
+    free(req_payload);
     //controllo che l'ID ricevuto non corrisponda ad un errore
     if(id != 7){
         //Implementa invio errore da client
@@ -820,16 +882,20 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     //invio una richiesta standard di download
     uint8_t id = 3;
     uint32_t num_packets = 0;
-    send_std_packet(filename, key,sd,counter,id,num_packets);
+    if(!send_std_packet(filename, key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio del pacchetto standard\n";
+        return;
+    }
 
     //ricevo la risposta del server 
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
+        std::cout<<"Errore nella ricezione della risposta dal server\n";
         return;
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
-        std::cout<<"Errore nella malloc\n";
+        std::cout<<"Errore nell'allocazione di memoria\n";
         free(response);
         return;
     }
@@ -874,8 +940,11 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     num_packets = 0;
 
     //invio un pacchetto di done al server 
-    send_std_packet(filename, key,sd,counter,id,num_packets);
-    
+    if(!send_std_packet(filename, key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio del pacchetto standard\n";
+        return;
+    }
+    return;
 }
 
 
@@ -895,17 +964,21 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
     uint32_t num_packets = 1;
 
     //invio il pacchetto standard per la richiesta di RENAME
-    send_std_packet(old_filename,key,sd,counter,id,num_packets);
+    if(!send_std_packet(old_filename,key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio del pacchetto standard\n";
+        return;
+    }
 
     //leggo la risposta del server
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
+        std::cout<<"Errore nella ricezione della risposta dal server\n";
         return;
     }
 
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
-        std::cout<<"Errore nella malloc\n";
+        std::cout<<"Errore nell'allocazione di memoria\n";
         free(response);
         return;
     }
@@ -945,7 +1018,11 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
 
 
     //invio al server un pacchetto data contente il nuovo filename 
-    send_data_packet((unsigned char*)new_filename.c_str(),key,sd,counter,new_filename.length()+1);
+    if(!send_data_packet((unsigned char*)new_filename.c_str(),key,sd,counter,new_filename.length()+1)){
+        std::cout<<"Errore nell'invio del nuovo filename al server\n";
+        free(plaintext);
+        return;
+    }
 
     //aspetto la risposta dal server
     response = wait_for_done(sd);
@@ -992,12 +1069,15 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
 
     uint8_t id = 5;
     uint32_t num_packets = 0;
-    send_std_packet(filename, key,sd,counter,id,num_packets); //invio richiesta standard per effettuare una delete di dimensione num_packets
-
+    if(!send_std_packet(filename, key,sd,counter,id,num_packets)){ //invio richiesta standard per effettuare una delete di dimensione num_packets
+        std::cout<<"Errore nell'invio della richiesta standard\n";
+        return;
+    }
 
     //ricevo il pacchetto di risposta 
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
+        std::cout<<"Errore nella malloc\n";
         return;
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
@@ -1041,7 +1121,10 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         filename.resize(SIZE_FILENAME);
         id = 8;
         //in caso di no allora invio al server un pacchetto standard di errore per comunicare che la delete è stato annullata 
-        send_std_packet(filename,key,sd,counter,id,num_packets);
+        if(!send_std_packet(filename,key,sd,counter,id,num_packets)){
+            std::cout<<"Errore nell'invio della conferma di DELETE\n";
+            return;
+        }
         std::cout<<"Delete annullata\n";
         return;
     }
@@ -1050,13 +1133,17 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         filename.resize(SIZE_FILENAME);
         id = 0;
         //in caso di conferma invio al server un nuovo pacchetto per confermare che la delete deve essere effettuata 
-        send_std_packet(filename,key,sd,counter,id,num_packets);
+        if(!send_std_packet(filename,key,sd,counter,id,num_packets)){
+            std::cout<<"Errore nell'invio della conferma di DELETE\n";
+            return;
+        }
     }
     else { // ERROR
         filename = "Errore sconosciuto";
         filename.resize(SIZE_FILENAME);
         id = 8;
-        send_std_packet(filename,key,sd,counter,id,num_packets);
+        if(!send_std_packet(filename,key,sd,counter,id,num_packets))
+            std::cout<<"Errore nell'invio della conferma di DELETE\n";
         return;
     }
 
@@ -1068,7 +1155,7 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
     }
     unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
     if(!req_payload){
-        std::cout<<"Errore nella malloc\n";
+        std::cout<<"Errore nell'allocazione di memoria\n";
         free(request);
         return;
     }
@@ -1077,6 +1164,7 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
     if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
+        free(req_payload);
         clean_socket(sd);
         (*counter) += num_packets +1;
         return;
@@ -1103,11 +1191,15 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
     msg.resize(SIZE_FILENAME);
 
     //invio la richiesta di logout al server 
-    send_std_packet(msg, key,sd,counter,id,num_packets);
+    if(!send_std_packet(msg, key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio della richiesta al server\n";
+        return;
+    }
 
     //ricevo la risposta dal server
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
+        std::cout<<"Errore nella malloc\n";
         return;
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
@@ -1154,7 +1246,10 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
         id = 8;
 
         //invio la richietsa standard con ID = 8 che annulla il logout 
-        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+            std::cout<<"Errore nell'invio della conferma di logout\n";
+            return;
+        }
         std::cout<<"Logout annullato\n";
         return;
     }
@@ -1164,17 +1259,26 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
         id = 0;
 
         //invio la richiesta standard che conferma il logout 
-        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+            std::cout<<"Errore nell'invio della conferma di logout\n";
+            return;
+        }
     }
     else { // ERROR
         msg = "Errore sconosciuto";
         msg.resize(SIZE_FILENAME);
         id = 8;
-        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets))
+            std::cout<<"Errore nell'invio della conferma di logout\n";
         return;
     }
 
     std::cout<<"Logout eseguito\n";
+
+    #pragma optimize("", off)
+    memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+    #pragma optimize("", on)
+
     free(key);
     free(counter);
     exit(0);

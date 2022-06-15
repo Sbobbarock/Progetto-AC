@@ -7,9 +7,19 @@ unsigned char* compute_signature(const EVP_MD* Hash_type, unsigned char* msg, in
     if(!signature)
         return NULL;
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    EVP_SignInit(ctx,Hash_type);
-    EVP_SignUpdate(ctx,msg,size_t(msg_len));
-    EVP_SignFinal(ctx,signature,signature_len,key);
+    if(!ctx) return NULL;
+    if(!EVP_SignInit(ctx,Hash_type)){
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
+    if(!EVP_SignUpdate(ctx,msg,size_t(msg_len))){
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
+    if(!EVP_SignFinal(ctx,signature,signature_len,key)){
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
     EVP_MD_CTX_free(ctx);
 
     return signature;
@@ -21,8 +31,15 @@ bool verify_signature(const EVP_MD* Hash_type, unsigned char* signature, int sig
 
     int ret;
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    EVP_VerifyInit(ctx,Hash_type);
-    EVP_VerifyUpdate(ctx,msg,size_t(msg_len));
+    if(!ctx) return NULL;
+    if(!EVP_VerifyInit(ctx,Hash_type)){
+        EVP_MD_CTX_free(ctx);
+        return false;
+    }
+    if(!EVP_VerifyUpdate(ctx,msg,size_t(msg_len))){
+        EVP_MD_CTX_free(ctx);
+        return false;
+    }
     ret = EVP_VerifyFinal(ctx,signature,sign_len,key);
     if(ret != 1){
         EVP_MD_CTX_free(ctx);

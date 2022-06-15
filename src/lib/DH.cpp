@@ -5,11 +5,25 @@
 //Meotod per creare la chiave privata
 EVP_PKEY* DH_privkey(){
     EVP_PKEY* dh_params = EVP_PKEY_new();
-    EVP_PKEY_set1_DH(dh_params, DH_get_2048_224());
+    if(!dh_params) return NULL;
+    if(!EVP_PKEY_set1_DH(dh_params, DH_get_2048_224())) return NULL;
     EVP_PKEY_CTX* dh_ctx = EVP_PKEY_CTX_new(dh_params,NULL);
+    if(!dh_ctx){
+        EVP_PKEY_free(dh_params);
+        return NULL;
+    }
+
     EVP_PKEY* my_privkey = NULL;
-    EVP_PKEY_keygen_init(dh_ctx);
-    EVP_PKEY_keygen(dh_ctx,&my_privkey);
+    if(!EVP_PKEY_keygen_init(dh_ctx)){
+        EVP_PKEY_free(dh_params);
+        EVP_PKEY_CTX_free(dh_ctx);
+        return NULL;
+    }
+    if(!EVP_PKEY_keygen(dh_ctx,&my_privkey)){
+        EVP_PKEY_free(dh_params);
+        EVP_PKEY_CTX_free(dh_ctx);
+        return NULL;
+    }
     EVP_PKEY_CTX_free(dh_ctx);
     EVP_PKEY_free(dh_params);
     return my_privkey;
@@ -33,7 +47,7 @@ unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub
 
     //leggo la dimensione del file PEM contenente la chiave pubblica
     fseek(pubkey_PEM,0,SEEK_END);
-    *file_len = (uint32_t)ftell(pubkey_PEM); //CHECK OVERFLOW!
+    *file_len = (uint32_t)ftell(pubkey_PEM);
     rewind(pubkey_PEM);
     unsigned char* buffer = (unsigned char*)malloc((size_t)*file_len);
     if(!buffer){
@@ -47,6 +61,7 @@ unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub
     if (ret < *file_len){
         std::cout<<"Errore nella lettura del file PEM\n";
         fclose(pubkey_PEM);
+        free(buffer);
         return NULL;
     }
     
@@ -102,7 +117,10 @@ unsigned char* DH_derive_session_secret(EVP_PKEY* my_privkey, EVP_PKEY* received
         std::cout<<"Errore nella malloc()\n";
         return NULL;
     }
-    EVP_PKEY_derive(ctx_drv,secret,secret_len);
+    if(!EVP_PKEY_derive(ctx_drv,secret,secret_len)){
+        EVP_PKEY_CTX_free(ctx_drv);
+        return NULL;
+    }
     EVP_PKEY_CTX_free(ctx_drv);
     return secret;
 }
@@ -115,9 +133,19 @@ unsigned char* session_key(const EVP_MD* Hash_type,const EVP_CIPHER* Cipher_type
     if(!full_digest)
         return NULL;
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    EVP_DigestInit(ctx,Hash_type);
-    EVP_DigestUpdate(ctx,msg,msg_len);
-    EVP_DigestFinal(ctx,full_digest,digest_len);
+    if(!ctx) return NULL;
+    if(!EVP_DigestInit(ctx,Hash_type)){
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
+    if(!EVP_DigestUpdate(ctx,msg,msg_len)){
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
+    if(!EVP_DigestFinal(ctx,full_digest,digest_len)){
+        EVP_MD_CTX_free(ctx);
+        return NULL;
+    }
     EVP_MD_CTX_free(ctx);
 
     if(*digest_len > EVP_CIPHER_key_length(Cipher_type)){

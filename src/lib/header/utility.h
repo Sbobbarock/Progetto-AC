@@ -26,7 +26,7 @@ bool send_packet(int sd, T* msg, int len){
     int tmp = 0;
     do{
         tmp = send(sd,msg,len,0);
-        if(tmp == -1) {
+        if(tmp == -1 || tmp == 0) {
             return false;
         }
         ret += tmp;
@@ -105,8 +105,10 @@ bool send_file(int sd,std::string file){
     rewind(f);
 
     unsigned char* buffer = (unsigned char*)malloc(file_len);
-    if(!buffer)
+    if(!buffer){
+        fclose(f);
         return false;
+    }
     fread(buffer,1,file_len,f);
     fclose(f);
     file_len = htonl(file_len);
@@ -186,7 +188,7 @@ unsigned char* build_request(unsigned char* aad, unsigned char* ciphertext, unsi
 
     unsigned char* request = (unsigned char*)malloc(cipher_len + aad_len + 16);
         if(!request){
-            std::cout<<"Errore nella malloc\n";
+            std::cout<<"Errore nell'allocazione di memoria\n";
             return NULL;
         }
 
@@ -198,13 +200,13 @@ unsigned char* build_request(unsigned char* aad, unsigned char* ciphertext, unsi
 
 
 /*Metodo per inviare un pacchetto di richiesta standard*/
-void send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* counter, uint8_t id, uint32_t num_packets){
+bool send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* counter, uint8_t id, uint32_t num_packets){
 
 
     unsigned char* iv = (unsigned char*)malloc(12);
     if(!iv){
         std::cout<<"Errore nella malloc\n";
-        return;
+        return false;
     }
     iv = nonce(iv,12);
 
@@ -212,14 +214,14 @@ void send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* 
     if(!aad){
         std::cout<<"Errore nella generazione dell' aad del pacchetto\n";
         free(iv);
-        return;
+        return false;
     }
     unsigned char* ciphertext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!ciphertext){
         std::cout<<"Errore nella malloc\n";
         free(iv);
         free(aad);
-        return;
+        return false;
     }
     unsigned char* tag = (unsigned char*)malloc(16);
     if(!tag){
@@ -227,7 +229,7 @@ void send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* 
         free(iv);
         free(aad);
         free(ciphertext);
-        return;
+        return false;
     }
     uint32_t* ciphertext_len = (uint32_t*)malloc(sizeof(uint32_t));
 
@@ -237,31 +239,32 @@ void send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* 
         free(aad);
         free(ciphertext);
         free(tag);
-        return;
+        free(ciphertext_len);
+        return false;
     }
+    free(iv);
     unsigned char* request = build_request(aad,ciphertext,tag,STD_AAD_LEN,*ciphertext_len);
     if(!request){
         std::cout<<"Errore nella malloc\n";
-        free(iv);
         free(aad);
         free(ciphertext);
         free(tag);
-        return;
+        free(ciphertext_len);
+        return false;
     }
-    if(!send_packet<unsigned char>(sd, request, REQ_LEN)){
-        std::cout<<"Errore nell'invio della richiesta\n";
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        free(tag);
-        return;
-    }
-    (*counter)++;
-    free(iv);
-    free(aad);
     free(ciphertext);
     free(tag);
-    return;
+    free(aad);
+    free(ciphertext_len);
+    if(!send_packet<unsigned char>(sd, request, REQ_LEN)){
+        std::cout<<"Errore nell'invio della richiesta\n";
+        free(request);
+        return false;
+    }
+    (*counter)++;
+    free(request);
+
+    return true;
 }
 
 
@@ -287,6 +290,7 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
 
     unsigned char* aad = (unsigned char*)malloc(STD_AAD_LEN);
     if(!aad){
+        free(ciphertext);
         std::cout<<"Errore nella malloc\n";
         return false;
     }
@@ -294,6 +298,7 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
     if(!tag){
         std::cout<<"Errore nella malloc\n";
         free(aad);
+        free(ciphertext);
         return false;
     }
     unsigned char* iv = (unsigned char*)malloc(12);
@@ -301,6 +306,7 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
         std::cout<<"Errore nella malloc\n";
         free(tag);
         free(aad);
+        free(ciphertext);
         return false;
     }
 
@@ -311,21 +317,24 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
     if(!decrypt_gcm(ciphertext, SIZE_FILENAME, aad, STD_AAD_LEN, tag, key, iv, plaintext,plaintext_len)){
         std::cout<<"Errore nella decifratura della richiesta\n";
         free(aad);
+        free(plaintext_len);
         free(tag);
         free(iv);
         free(ciphertext);
         return false;
     }   
+    free(iv);
+    free(tag);
+    free(aad);
+    free(ciphertext);
+    free(plaintext_len);
     if(received_count != *counter){
         std::cout<<"Counter errato\n";
         std::cout<<received_count<<" != "<<*counter<<std::endl;
         return false;
     }
     (*counter)++;
-    free(aad);
-    free(tag);
-    free(iv);
-    free(ciphertext); 
+
     return true;
 }
 
@@ -348,12 +357,12 @@ unsigned char* build_aad_data(uint64_t counter, unsigned char* iv){
 
 
 /*Funzione per inviare un pacchetto data*/
-void send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* counter,uint32_t data_len){
+bool send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* counter,uint32_t data_len){
 
     unsigned char* iv = (unsigned char*)malloc(12);
     if(!iv){
         std::cout<<"Errore nella malloc\n";
-        return;
+        return false;
     }
     iv = nonce(iv,12);
 
@@ -361,14 +370,14 @@ void send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* 
     if(!aad){
         std::cout<<"Errore nella generazione dell' aad del pacchetto\n";
         free(iv);
-        return ;
+        return false;
     }
     unsigned char* ciphertext = (unsigned char*)malloc(data_len + 16);
     if(!ciphertext){
         std::cout<<"Errore nella malloc\n";
         free(iv);
         free(aad);
-        return ;
+        return false;
     }
     unsigned char* tag = (unsigned char*)malloc(16);
     if(!tag){
@@ -376,7 +385,7 @@ void send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* 
         free(iv);
         free(aad);
         free(ciphertext);
-        return ;
+        return false;
     }
 
     uint32_t* ciphertext_len = (uint32_t*)malloc(sizeof(uint32_t));
@@ -387,40 +396,36 @@ void send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* 
         free(aad);
         free(ciphertext);
         free(tag);
-        return ;
+        return false;
     }
-
+    free(iv);
     unsigned char* extended_aad = (unsigned char*)malloc(AAD_LEN + sizeof(uint32_t));
     memcpy(extended_aad, ciphertext_len, sizeof(uint32_t));
     memcpy(extended_aad + sizeof(uint32_t), aad, AAD_LEN);
+    free(aad);
     unsigned char* request = build_request(extended_aad,ciphertext,tag,AAD_LEN + sizeof(uint32_t),*ciphertext_len);
     if(!request){
         std::cout<<"Errore nella malloc\n";
-        free(iv);
         free(aad);
         free(ciphertext);
         free(tag);
         free(extended_aad);
-        return ;
+        return false;
     }
+    free(tag);
+    free(ciphertext);
+    free(extended_aad);
     if(!send_packet<unsigned char>(sd, request, sizeof(uint32_t) + AAD_LEN + *ciphertext_len + 16)){
         std::cout<<"Errore nell'invio della richiesta\n";
-        free(iv);
-        free(aad);
-        free(ciphertext);
-        free(tag);
-        free(extended_aad);
-        return ;
+        free(request);
+        free(ciphertext_len);
+        return false;
     }
     (*counter)++;
-    free(iv);
+
     free(request);
     free(ciphertext_len);
-    free(aad);
-    free(ciphertext);
-    free(tag);
-    free(extended_aad);
-    return;
+    return true;
 }
 
 
@@ -440,18 +445,29 @@ unsigned char* receive_data_packet(int sd,uint64_t* counter,unsigned char* key,u
     if(received_count != *counter){
         std::cout<<"Errore: counter errato\n";
         std::cout<<received_count<<" != "<<*counter<<std::endl;
+        free(iv);
+        free(data_len);
+        free(aad);
+        free(payload);
+        free(tag);
         return NULL;
     }
     (*counter)++;
     unsigned char* plaintext = (unsigned char*)malloc(*data_len);
     if(!decrypt_gcm(payload, *data_len, aad, AAD_LEN, tag, key, iv, plaintext,plaintext_len)){
+        free(iv);
+        free(data_len);
+        free(aad);
+        free(payload);
+        free(tag);
+        free(plaintext);
         return NULL;
     }
+    free(iv);
     free(data_len);
     free(aad);
     free(payload);
     free(tag);
-    free(iv);
     return plaintext;
 }
 
@@ -466,6 +482,7 @@ uint32_t how_many_fragments(uint64_t size){
 bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsigned char* key, uint64_t* counter) {
     FILE* file = fopen(filename.c_str(),"w+");
     if(!file) {
+        std::cout<<"Errore nell'apertura del file in scrittura\n";
         return false;
     }
     unsigned char* plaintext;
@@ -477,6 +494,7 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
         plaintext = receive_data_packet(sd,counter,key,plaintext_len);
         if(!plaintext){
             std::cout<<"Errore nella ricezione del pacchetto\n";
+            free(plaintext_len);
             fclose(file);
             remove(filename.c_str());
             (*counter) += num_packets - (i+1);
@@ -522,6 +540,7 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
         file = fopen((username + "/" + filename).c_str(),"r");
     }
     if(!file) {
+        std::cout<<"Errore nell'apertura del file in lettura\n";
         return false;
     }
     unsigned char* data;

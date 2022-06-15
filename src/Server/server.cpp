@@ -470,7 +470,13 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         id = 8; //ID di errore 
         plaintext = std::string("Cartella non trovata");
         plaintext.resize(SIZE_FILENAME);
-        send_std_packet(plaintext,key,sd,counter,id,1);
+        if(!send_std_packet(plaintext,key,sd,counter,id,1)){
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
+        }
         return;
     }
     
@@ -478,7 +484,15 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     while ((dirent = readdir(dir)) != NULL) {
         num_packets++;
     }
-    send_std_packet(plaintext,key,sd,counter,0,num_packets);
+    if(!send_std_packet(plaintext,key,sd,counter,0,num_packets)){
+        std::cout<<"Errore nell'invio del pacchetto standard\n";
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
+        return;
+    }
     rewinddir(dir);
  
 
@@ -492,7 +506,14 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
                 plaintext = "├── " + (std::string)dirent->d_name + "\n";
             }
             plaintext.resize(SIZE_FILENAME);
-            send_data_packet((unsigned char*)plaintext.c_str(),key,sd,counter,SIZE_FILENAME);
+            if(!send_data_packet((unsigned char*)plaintext.c_str(),key,sd,counter,SIZE_FILENAME)){
+                #pragma optimize("", off)
+                memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+                #pragma optimize("", on)
+                free(key);
+                disconnect(sd);
+                return;
+            }
         }
     }
     closedir(dir);
@@ -516,11 +537,13 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
+        free(req_payload);
         clean_socket(sd);
         (*counter) += num_packets +1;;
         return;
     }
     free(request);
+    free(req_payload);
 
     //controllo la validità dell'ID ricevuto 
     if(id != 7){
@@ -556,7 +579,15 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     }
 
     //invio un pacchetto standard di ACK 
-    send_std_packet(msg,key,sd,counter,id,num_packets);
+    if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio dell'ACK\n";
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
+        return;
+    }
 
     //ricevo iterativamente i pacchetti data dal client
     std::string filename = (*username + "/" + (char*)plaintext).c_str();
@@ -573,7 +604,14 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     filename.resize(SIZE_FILENAME);
     id = 7; //ID di done
     num_packets = 0;
-    send_std_packet(filename, key,sd,counter,id,num_packets);
+    if(!send_std_packet(filename, key,sd,counter,id,num_packets)){
+        std::cout<<"Errore nell'invio del pacchetto DONE\n";
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
+    }
     return;
 }
 
@@ -628,7 +666,14 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         num_packets = how_many_fragments(file_len);
 
         //invio un pacchetto standard di ACK 
-        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+            std::cout<<"Errore nell'invio dell'ACK\n";
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
+        }
         if(id != 0) return;
         std::string filename;
         filename = std::string((char*)plaintext);
@@ -660,13 +705,12 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
-            free(plaintext);
             clean_socket(sd);
             (*counter) += num_packets +1;
             return;
         }
         free(request);
-
+        free(req_payload);
         //controllo se l'ID ricevuto non è di errore 
         if(id != 7){
             //Implementa invio errore da client
@@ -694,7 +738,13 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         id = 8;
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
-        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
+        }
         return;
     }
     
@@ -704,7 +754,13 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         id = 8; //ID di errore 
         msg = std::string("File non esistente");
         msg.resize(SIZE_FILENAME);
-        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
+        }
         return;
     }
 
@@ -712,10 +768,15 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     msg = std::string("");
     msg.resize(SIZE_FILENAME);
     fclose(file);
-    free(plaintext);
 
     //invio un pacchetto standard di ACK al client per cofnermare che l'operazione può procedere
-    send_std_packet(msg,key,sd,counter,id,num_packets);
+    if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
+    }
 
 
     uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
@@ -745,8 +806,16 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         msg = std::string("");
     }
     msg.resize(SIZE_FILENAME);
+    free(new_filename);
+    free(plaintext_len);
     //invio un pacchetto di ACK al client per confermare che l'operazione ha avuto successo
-    send_std_packet(msg,key,sd,counter,id,num_packets);
+    if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
+    }
     std::cout<<"Rename completata"<<std::endl;
     return;
 }
@@ -764,7 +833,13 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         id = 8; //ID di errore 
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
-        send_std_packet(msg,key,sd,counter,id,num_packets); //in caso non lo sia invio un pacchetto di errore
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){ //in caso non lo sia invio un pacchetto di errore
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
+        }
         return;
     }
     //in caso lo ha trovato vado ad aprire il file per controllarne la sua esistenza nel server
@@ -773,16 +848,29 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         id = 8; //ID di errore 
         msg = std::string("File non esistente");
         msg.resize(SIZE_FILENAME);
-        send_std_packet(msg,key,sd,counter,id,num_packets); //in caso non lo sia invio un pacchetto di errore
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){ //in caso non lo sia invio un pacchetto di errore
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
+        }
         return;
     }
     else {
+        fclose(file);
         msg = "";
         msg.resize(SIZE_FILENAME);
         id = 0; // ACK
 
         //invio un pacchetto di ACK
-        send_std_packet(msg,key,sd,counter,id,num_packets);
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
+        }
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
         if(!request){
             std::cout<<"Delete failed\n"<<std::endl;
@@ -799,13 +887,13 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
-            free(plaintext);
+            free(req_payload);
             clean_socket(sd);
             (*counter) += num_packets +1;
             return;
         }
         free(request);
-
+        free(req_payload);
         //controllo che l'id ricevuto sia conforme
         if(id != 0){
             std::cout<<"Delete annullata\n";
@@ -818,7 +906,13 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
                 msg="Impossibile rimuovere il file";
                 msg.resize(SIZE_FILENAME);
                 id = 8;
-                send_std_packet(msg,key,sd,counter,id,num_packets);
+                if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+                    #pragma optimize("", off)
+                    memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+                    #pragma optimize("", on)
+                    free(key);
+                    disconnect(sd);
+                }
                 return;
             }
             id = 7;
@@ -826,8 +920,13 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
             std::cout<<"Delete completata"<<std::endl;
 
             //invio un pacchetto di done al client 
-            send_std_packet(msg,key,sd,counter,id,num_packets);
-            free(plaintext);
+            if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+                #pragma optimize("", off)
+                memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+                #pragma optimize("", on)
+                free(key);
+                disconnect(sd);
+            }
             return;
         }
     }
@@ -843,8 +942,13 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
     msg.resize(SIZE_FILENAME);
 
     //invio un pacchetto di ACK al client 
-    send_std_packet(msg,key,sd,counter,id,num_packets);
-
+    if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
+    }
     //aspetto la conferma dal client
     unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!request){
@@ -886,6 +990,9 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
     
     std::cout<<"Logout completato"<<std::endl;
     free(counter);
+    #pragma optimize("", off)
+    memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+    #pragma optimize("", on)
     free(key);
     disconnect(sd);
 
@@ -899,6 +1006,10 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
         if(!request){
             std::cout<<"Errore nella ricezione della richiesta\n";
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
             disconnect(sd);
         }
 
@@ -939,6 +1050,7 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
             default: 
                 break;
         }
+        free(plaintext);
     }
 }
 
@@ -953,13 +1065,19 @@ void* manageConnection(void* s){
     while(true){
         uint64_t* counter = (uint64_t*)malloc(sizeof(uint64_t));
         if(!counter){
+            #pragma optimize("", off)
+            memset(K_ab, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
             free(K_ab);
             disconnect(sd);
         }
         *counter = 0;
         wait_request(sd,counter,K_ab,username);
     }
-
+    #pragma optimize("", off)
+    memset(K_ab, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+    #pragma optimize("", on)
+    free(K_ab);
     disconnect(sd); 
 }
 
