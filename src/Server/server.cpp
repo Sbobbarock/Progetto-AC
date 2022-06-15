@@ -477,10 +477,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     rewinddir(dir);
     for (int i = 0; i < num_packets; i++) {
         if ((dirent = readdir(dir)) != NULL) {
-            if(i==0) {
-                plaintext = (std::string)dirent->d_name + "\n";
-            }
-            else if (i == num_packets-1) {
+            if (i == num_packets-1) {
                 plaintext = "└── " + (std::string)dirent->d_name + "\n";
             }
             else {
