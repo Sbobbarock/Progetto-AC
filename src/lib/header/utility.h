@@ -58,12 +58,16 @@ T* recv_packet(int sd,int len){
     return buffer;
 }
 
+
+/*Funzione che genera un numero randomico detto NONCE */
 unsigned char* nonce(unsigned char* buffer, unsigned int nonce_len){
     RAND_poll();
     RAND_bytes(buffer,nonce_len);
     return buffer;
 }
 
+
+/*Funzione che legge il file PEM contente la chiave privata RSA */
 EVP_PKEY* read_RSA_privkey(std::string filename){
     FILE* file = fopen(filename.c_str(),"r");
     if(!file) {
@@ -74,6 +78,8 @@ EVP_PKEY* read_RSA_privkey(std::string filename){
     return key;
 }
 
+
+/*Funzione che legge il file PEM contente la chiave pubblica RSA */
 EVP_PKEY* read_RSA_pubkey(std::string username){
     std::string file_name;
     file_name = "PubKeyList/" + username + ".pem";
@@ -86,6 +92,8 @@ EVP_PKEY* read_RSA_pubkey(std::string username){
     return key;
 }
 
+
+/*Funzione che invia un file*/
 bool send_file(int sd,std::string file){
 
     FILE* f = fopen(file.c_str(),"r");
@@ -109,6 +117,7 @@ bool send_file(int sd,std::string file){
     return true;
 }
 
+
 /*Funzione che controlla la validita' di una stringa: 
   - la stringa non e' vuota? 
   - i caratteri che ne fanno parte sono consentiti? */
@@ -123,6 +132,8 @@ bool check_string(std::string s){
     return true;
 }
 
+
+/*Funzione che svuota la socket per ripristinare la connessione*/
 void clean_socket(int sd){
     
     std::cout<<"Ripristino della connessione in corso...\n";
@@ -143,6 +154,12 @@ void clean_socket(int sd){
     return;
 }
 
+
+/*Funzione che costruisce la AAD di un pacchetto standard:  
+  1) counter 
+  2) id 
+  3) num_packets 
+  4) iv */
 unsigned char* build_aad_std(uint64_t counter, uint32_t num_packets, uint8_t id, unsigned char* iv){
 
     //aad = counter || id || num_packets || iv
@@ -158,6 +175,13 @@ unsigned char* build_aad_std(uint64_t counter, uint32_t num_packets, uint8_t id,
     return aad;
 }
 
+
+
+
+/*Metodo per costruire una richiesta standard: 
+  1) AAD
+  2) Ciphertext
+  3) TAG */
 unsigned char* build_request(unsigned char* aad, unsigned char* ciphertext, unsigned char* tag,uint32_t aad_len, uint32_t cipher_len){
 
     unsigned char* request = (unsigned char*)malloc(cipher_len + aad_len + 16);
@@ -173,6 +197,7 @@ unsigned char* build_request(unsigned char* aad, unsigned char* ciphertext, unsi
 }
 
 
+/*Metodo per inviare un pacchetto di richiesta standard*/
 void send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* counter, uint8_t id, uint32_t num_packets){
 
 
@@ -239,6 +264,8 @@ void send_std_packet(std::string filename, unsigned char* key,int sd, uint64_t* 
     return;
 }
 
+
+/*Metodo che permette di estrapolare i vari parametri della richiesta standarduna volta ricevuta*/
 bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_packets, uint8_t* id, unsigned char* plaintext,unsigned char* key){
 
     uint64_t received_count;
@@ -302,6 +329,10 @@ bool read_request_param(unsigned char* request,uint64_t* counter,uint32_t* num_p
     return true;
 }
 
+
+/*Funzione che costruisce la AAD di un pacchetto data:  
+  1) counter 
+  4) iv */
 unsigned char* build_aad_data(uint64_t counter, unsigned char* iv){
 
     //aad = counter || iv
@@ -315,6 +346,8 @@ unsigned char* build_aad_data(uint64_t counter, unsigned char* iv){
     return aad;
 }
 
+
+/*Funzione per inviare un pacchetto data*/
 void send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* counter,uint32_t data_len){
 
     unsigned char* iv = (unsigned char*)malloc(12);
@@ -390,6 +423,8 @@ void send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* 
     return;
 }
 
+
+//Funzione che riceve il pacchetto data e ne estrapola i parametri 
 unsigned char* receive_data_packet(int sd,uint64_t* counter,unsigned char* key,uint32_t* plaintext_len){
 
     uint32_t* data_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
@@ -420,10 +455,14 @@ unsigned char* receive_data_packet(int sd,uint64_t* counter,unsigned char* key,u
     return plaintext;
 }
 
+
+//metodo per dividere un pacchetto di dimensione superiore di MAX_PAYLOAD_SIZE in tanti sottopacchetti di dimensione fissa
 uint32_t how_many_fragments(uint64_t size){
     return size/MAX_PAYLOAD_SIZE + (size % MAX_PAYLOAD_SIZE != 0);
 }
 
+
+//metodo per creare il file iterativamente con la ricezione dei pacchetti data 
 bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsigned char* key, uint64_t* counter) {
     FILE* file = fopen(filename.c_str(),"w+");
     if(!file) {
@@ -472,6 +511,8 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
     return true;
 }
 
+
+//metodo per leggere il file inviando iterativamente dei pacchetti data 
 bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_len, std::string filename, int sd, unsigned char* key, uint64_t* counter){
     FILE* file;
     if(username.empty()) {
@@ -531,6 +572,8 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
     return true;
 }
 
+
+//metodo per attendere la richesta di done
 unsigned char* wait_for_done(int sd){
     
     fd_set READY;

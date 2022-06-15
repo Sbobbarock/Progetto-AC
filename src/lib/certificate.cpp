@@ -17,6 +17,8 @@ X509_STORE* build_store(std::string file_crl,std::string root_cert){
     return store;
 }
 
+
+//metodo per leggere il certificato 
 X509* read_certificate(std::string file,unsigned char* buffer,uint32_t len){
     FILE* f_cert = fopen(file.c_str(),"w+");
     if(!f_cert) return NULL;
@@ -27,6 +29,8 @@ X509* read_certificate(std::string file,unsigned char* buffer,uint32_t len){
     return cert;
 }
 
+
+//metodo per verificare la validità di un certificato
 EVP_PKEY* validate_certificate(X509_STORE* store, X509* cert){
 
     X509_STORE_add_cert(store,cert);
