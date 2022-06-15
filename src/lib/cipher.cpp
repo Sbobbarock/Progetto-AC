@@ -2,6 +2,7 @@
 #include <openssl/err.h>
 #include <iostream>
 
+//funzione per crittografare un blocco di dati. 
 bool encrypt_gcm(unsigned char *plaintext, int plaintext_len,
                 unsigned char *aad, int aad_len,
                 unsigned char *key,
@@ -41,6 +42,9 @@ bool encrypt_gcm(unsigned char *plaintext, int plaintext_len,
     return true;
 }
 
+
+
+//funzione per decriptare il ciphertext. 
 bool decrypt_gcm(unsigned char *ciphertext, uint32_t ciphertext_len,
                 unsigned char *aad, int aad_len,
                 unsigned char *tag,

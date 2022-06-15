@@ -456,6 +456,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
     return K_ab;
 }
 
+//Funzione che gestisce l'operazione di list
 void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     uint8_t id;
     std::string plaintext;
@@ -463,6 +464,8 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     struct dirent *dirent;
     DIR *dir;
     dir = opendir((*username + "/").c_str());
+
+    //apro la cartella e controllo se essa esiste 
     if (dir == NULL) {
         id = 8; //ID di errore 
         plaintext = std::string("Cartella non trovata");
@@ -470,11 +473,16 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         send_std_packet(plaintext,key,sd,counter,id,1);
         return;
     }
+    
+    //mi muovo all'interno della cartella e calcolo al dimensione dalla lista 
     while ((dirent = readdir(dir)) != NULL) {
         num_packets++;
     }
     send_std_packet(plaintext,key,sd,counter,0,num_packets);
     rewinddir(dir);
+ 
+
+    //invio iterativamente i pacchetti data al client che contengono la lista
     for (int i = 0; i < num_packets; i++) {
         if ((dirent = readdir(dir)) != NULL) {
             if (i == num_packets-1) {
@@ -489,21 +497,22 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     }
     closedir(dir);
 
-
-    //dovrei ricevere pacchetto richiesta DONE
-    //parametri da leggere nel pacchetto di richiesta
-
+    //attendo la richietsa di done del client 
     unsigned char* request = wait_for_done(sd);
     if(!request){
         std::cout<<"List failed\n"<<std::endl;
         return;
     }
+
+    //attendo la richiesta nuova del client 
     unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
     if(!req_payload){
         std::cout<<"Errore nella malloc\n";
         free(request);
         return;
     }
+
+    //estrapolo i parametri della richiesta 
     if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
@@ -512,6 +521,8 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         return;
     }
     free(request);
+
+    //controllo la validità dell'ID ricevuto 
     if(id != 7){
         //Implementa invio errore da client
         std::cout<<"Errore: il client non ha ricevuto la list\n";
@@ -521,6 +532,8 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     return;
 }
 
+
+/*Funzione che gestisce l'operazione di upload*/
 void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username, uint32_t num_packets){
     uint8_t id;
     std::string msg;
@@ -530,6 +543,8 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     msg.resize(SIZE_FILENAME);
 
     *(plaintext + SIZE_FILENAME -1 ) = '\0';
+
+    //controlla che la stringa ricevuta sia valida
     if(!check_string(std::string((char*)plaintext))){
         id = 8; //ID di errore 
         msg = std::string("Filename non valido");
@@ -537,10 +552,13 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     }
     if(num_packets > UINT32_MAX/MAX_PAYLOAD_SIZE){
         std::cout<<"Tentativo di inviare un file più grande di 4GB\n";
-        //DEVE FARE LA DISCONNESSIONE!
         return;
     }
+
+    //invio un pacchetto standard di ACK 
     send_std_packet(msg,key,sd,counter,id,num_packets);
+
+    //ricevo iterativamente i pacchetti data dal client
     std::string filename = (*username + "/" + (char*)plaintext).c_str();
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
@@ -559,6 +577,8 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     return;
 }
 
+
+/*Funzione che gestisce l'operazione di download*/
 void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
 
     uint8_t id;
@@ -567,6 +587,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
     uint32_t num_packets;
 
     *(plaintext + SIZE_FILENAME -1 ) = '\0';
+
+    //controllo che la stringa ricevuta sia valida 
     if(!check_string(std::string((char*)plaintext))){
         id = 8; //ID di errore 
         msg = std::string("Filename non valido");
@@ -577,6 +599,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
     }
     else {
         FILE* file = fopen((*username + "/" + (char*)plaintext).c_str(),"r");
+
+        //verifico l'esistenza del file che si dovrebbe inviare al client 
         if(!file){
             id = 8; //ID di errore 
             msg = std::string("File non esistente");
@@ -585,6 +609,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         }
         else{
             fseek(file,0,SEEK_END);
+
+            //calcolo la dimensione del file
             file_len = (ftell(file) > UINT32_MAX)? 0: ftell(file);
         
             if(!file_len && ftell(file)){
@@ -600,10 +626,15 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             fclose(file);
         }
         num_packets = how_many_fragments(file_len);
+
+        //invio un pacchetto standard di ACK 
         send_std_packet(msg,key,sd,counter,id,num_packets);
         if(id != 0) return;
         std::string filename;
         filename = std::string((char*)plaintext);
+
+
+        //invio iterativamente i pacchetti data al client 
         if(!read_transfer_op(*username, num_packets, file_len, filename, sd, key, counter)) {
             std::cout<<":("<<std::endl;
             return;
@@ -615,7 +646,6 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             return;
         }
 
-        //dovrei ricevere pacchetto richiesta DONE
         //parametri da leggere nel pacchetto di richiesta
         uint32_t num_packets;
         uint8_t id;
@@ -625,6 +655,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             free(request);
             return;
         }
+
+        //estrapolo i parametri della risposta 
         if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
@@ -634,6 +666,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
             return;
         }
         free(request);
+
+        //controllo se l'ID ricevuto non è di errore 
         if(id != 7){
             //Implementa invio errore da client
             std::cout<<"Errore: il client non ha ricevuto il file\n";
@@ -644,6 +678,8 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
     }
 }
 
+
+/*Funzione che gestisce l'operazione di rename*/
 void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
 
     uint8_t id;
@@ -652,6 +688,8 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 
     *(plaintext + SIZE_FILENAME -1) = '\0';
     std::string old_filename = std::string((char*)plaintext);
+
+    //controllo che il filename ricevuto sia valido 
     if(!check_string(old_filename)){
         id = 8;
         msg = std::string("Filename non valido");
@@ -660,6 +698,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         return;
     }
     
+    //controllo se il file con il filename ricevuto esista 
     FILE* file = fopen((*username + "/" + (char*)plaintext).c_str(),"r");
     if(!file){
         id = 8; //ID di errore 
@@ -674,10 +713,14 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     msg.resize(SIZE_FILENAME);
     fclose(file);
     free(plaintext);
+
+    //invio un pacchetto standard di ACK al client per cofnermare che l'operazione può procedere
     send_std_packet(msg,key,sd,counter,id,num_packets);
 
 
     uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
+
+    //leggo il nuovo filename dalla richiesta del client 
     unsigned char* new_filename = receive_data_packet(sd,counter,key,plaintext_len);
     if(!new_filename){
         free(plaintext_len);
@@ -687,6 +730,8 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     }
     *(new_filename + *plaintext_len - 1) = '\0';
     std::string new_filename_string = std::string((char*)new_filename);
+
+    //ne controllo la validità
     if(!check_string(new_filename_string)){
         id = 8;
         msg = std::string("Filename non valido");
@@ -700,11 +745,14 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         msg = std::string("");
     }
     msg.resize(SIZE_FILENAME);
+    //invio un pacchetto di ACK al client per confermare che l'operazione ha avuto successo
     send_std_packet(msg,key,sd,counter,id,num_packets);
     std::cout<<"Rename completata"<<std::endl;
     return;
 }
 
+
+/*Funzione che gestisce l'operazione di delete*/
 void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
     uint8_t id;
     std::string msg;
@@ -732,6 +780,8 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         msg = "";
         msg.resize(SIZE_FILENAME);
         id = 0; // ACK
+
+        //invio un pacchetto di ACK
         send_std_packet(msg,key,sd,counter,id,num_packets);
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
         if(!request){
@@ -744,6 +794,8 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
             free(request);
             return;
         }
+
+        //estrapolo i parametri della risposta del client 
         if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
@@ -753,12 +805,15 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
             return;
         }
         free(request);
+
+        //controllo che l'id ricevuto sia conforme
         if(id != 0){
             std::cout<<"Delete annullata\n";
             return;
         }
         else {
             msg = "";
+            //controllo che l'operazione si possa svolgere 
             if(remove((*username + "/" + (char*)plaintext).c_str()) != 0) {
                 msg="Impossibile rimuovere il file";
                 msg.resize(SIZE_FILENAME);
@@ -769,6 +824,8 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
             id = 7;
             msg.resize(SIZE_FILENAME);
             std::cout<<"Delete completata"<<std::endl;
+
+            //invio un pacchetto di done al client 
             send_std_packet(msg,key,sd,counter,id,num_packets);
             free(plaintext);
             return;
@@ -776,12 +833,16 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
     }
 }
 
+
+/*Funzione che gestisce l'operazione di logout*/
 void logout(unsigned char* key, int sd,uint64_t* counter){
 
     uint8_t id = 0;
     std::string msg = "";
     uint32_t num_packets = 0;
     msg.resize(SIZE_FILENAME);
+
+    //invio un pacchetto di ACK al client 
     send_std_packet(msg,key,sd,counter,id,num_packets);
 
     //aspetto la conferma dal client
@@ -796,6 +857,8 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
         std::cout<<"Errore nella malloc\n";
         return;
     }
+
+    //estrapolo i parametri della nuova richiesta 
     if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
@@ -806,6 +869,8 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
     }
     free(request);
     plaintext[SIZE_FILENAME -1] = '\0';
+
+    //controllo l'ID ricevuto 
     if(id == 8){
         std::cout<<(char*)plaintext<<std::endl;
         free(plaintext);
@@ -826,6 +891,8 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
 
 }
 
+
+/*Funzione che attende la richiesta standard e controlla l'ID ricevuto per reindirizzarci all'operazione scelta dal client che deve essere eseguita*/
 void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* username){
     while(true) {
         std::cout<<"-------------------\n";
@@ -844,6 +911,8 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
             free(request);
             return;
         }
+
+        //estrapolo i parametri della richiesta 
         if(!read_request_param(request,counter,&num_packets,&id,plaintext,key)){
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
@@ -893,6 +962,9 @@ void* manageConnection(void* s){
 
     disconnect(sd); 
 }
+
+
+
 
 int main(int n_args, char** args){
     int i;
