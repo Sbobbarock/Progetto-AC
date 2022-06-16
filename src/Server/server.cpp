@@ -521,7 +521,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     //attendo la richietsa di done del client 
     unsigned char* request = wait_for_done(sd);
     if(!request){
-        std::cout<<"List failed\n"<<std::endl;
+        std::cout<<"List failed"<<std::endl;
         return;
     }
 
@@ -687,7 +687,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         std::cout<<std::endl;
         unsigned char* request = wait_for_done(sd);
         if(!request){
-            std::cout<<"Download failed\n"<<std::endl;
+            std::cout<<"Download failed"<<std::endl;
             return;
         }
 
@@ -873,7 +873,7 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         }
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
         if(!request){
-            std::cout<<"Delete failed\n"<<std::endl;
+            std::cout<<"Delete failed"<<std::endl;
             return;
         }
         unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
