@@ -64,7 +64,7 @@ unsigned char* handshake(int sd){
     }
     
     //controllo che lo username del client sia presente nella lista degli utenti registrati sul server
-    bool* login_status =recv_packet<bool>(sd,sizeof(bool));
+    bool* login_status = recv_packet<bool>(sd,sizeof(bool));
     if(!login_status || *login_status == false){
         std::cout<<"Nome utente non registrato\n";
         free(nonce_c);
@@ -116,6 +116,7 @@ unsigned char* handshake(int sd){
     unsigned char* my_DH_pubkeyPEM = DH_pubkey(std::string("dh_myPUBKEY.pem"),my_DHprivkey,my_DHpubkey,len);
     if(!my_DH_pubkeyPEM){
         std::cout<<"Errore nella generazione della chiave pubblica\n";
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         EVP_PKEY_free(my_DHprivkey);
         EVP_PKEY_free(my_DHpubkey);
         free(nonce_c);
@@ -131,6 +132,7 @@ unsigned char* handshake(int sd){
     *len = htonl(*len);
     if(!send_packet<uint32_t>(sd,len,sizeof(uint32_t))){
         std::cout<<"Errore nell'invio della dimensione del file PEM\n";
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         EVP_PKEY_free(my_DHprivkey);
         free(nonce_c);
         free(my_DH_pubkeyPEM);
@@ -143,6 +145,7 @@ unsigned char* handshake(int sd){
     //invio il file PEM con la chiave pubblica al server
     if(!send_packet<unsigned char>(sd,my_DH_pubkeyPEM,my_DHpubkeyLEN)){
         std::cout<<"Errore nell'invio del file PEM con la chiave pubblica\n";
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         EVP_PKEY_free(my_DHprivkey);
         free(nonce_c);
         free(my_DH_pubkeyPEM);
@@ -172,6 +175,7 @@ unsigned char* handshake(int sd){
     uint32_t* server_DH_pubkeyLEN = recv_packet<uint32_t>(sd,sizeof(uint32_t));
     if(!server_DH_pubkeyLEN){
         std::cout<<"Errore nella ricezione della dimensione del file PEM\n";
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         EVP_PKEY_free(my_DHprivkey);
         free(nonce_c);
         free(my_DH_pubkeyPEM);
@@ -180,14 +184,12 @@ unsigned char* handshake(int sd){
         exit(1);
     }
     *server_DH_pubkeyLEN = ntohl(*server_DH_pubkeyLEN);
-    ///////////////////
-    //CHECK OVERFLOW//
-    /////////////////
 
     //ricevo la chiave pubblica del server in un file PEM
     unsigned char* server_DH_pubkeyPEM = recv_packet<unsigned char>(sd,*server_DH_pubkeyLEN);
     if(!server_DH_pubkeyPEM){
         std::cout<<"Chiave pubblica non ricevuta correttamente\n";
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         EVP_PKEY_free(my_DHprivkey);
         free(nonce_c);
         free(server_DH_pubkeyLEN);
@@ -202,6 +204,8 @@ unsigned char* handshake(int sd){
     EVP_PKEY* server_pubkey = DH_derive_pubkey(std::string("dh_serverpubkey.pem"),server_DH_pubkeyPEM,*server_DH_pubkeyLEN);
     if(!server_pubkey){
         std::cout<<"Errore nella derivazione della chiave pubblica ricevuta dal server\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         EVP_PKEY_free(my_DHprivkey);
         free(nonce_c);
         free(server_DH_pubkeyPEM);
@@ -232,6 +236,8 @@ unsigned char* handshake(int sd){
     unsigned char* secret = DH_derive_session_secret(my_DHprivkey,server_pubkey,&secret_len);
     if(!secret){
         std::cout<<"Errore nella derivazione del segreto di sessione\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         EVP_PKEY_free(my_DHprivkey);
         free(nonce_c);
         free(server_DH_pubkeyPEM);
@@ -250,6 +256,8 @@ unsigned char* handshake(int sd){
     unsigned char* K_ab = session_key(EVP_sha256(),EVP_aes_128_gcm(),secret,secret_len,&key_len);
     if(!K_ab){
         std::cout<<"Errore nel calcolo di K_ab\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         free(nonce_c);
         free(secret);
         free(server_DH_pubkeyPEM);
@@ -287,6 +295,8 @@ unsigned char* handshake(int sd){
     uint32_t* sign_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
     if(!sign_len){
         std::cout<<"Errore nella ricezione di sign_len\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         free(nonce_c);
         free(K_ab);
         free(server_DH_pubkeyPEM);
@@ -302,6 +312,8 @@ unsigned char* handshake(int sd){
     unsigned char* server_signature = recv_packet<unsigned char>(sd,*sign_len);
     if(!server_signature){
         std::cout<<"Errore nella ricezione della firma digitale del server\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         free(nonce_c);
         free(K_ab);
         free(server_DH_pubkeyPEM);
@@ -318,6 +330,8 @@ unsigned char* handshake(int sd){
     uint32_t* cert_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
     if(!cert_len){
         std::cout<<"Errore nella ricezione del certificato del server\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         delete username;
         free(nonce_c);
         free(K_ab);
@@ -336,6 +350,8 @@ unsigned char* handshake(int sd){
     unsigned char* server_cert_msg = recv_packet<unsigned char>(sd,*cert_len);
     if(!server_cert_msg){
         std::cout<<"Errore nella ricezione del certificato del server\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
         delete username;
         free(nonce_c);
         free(K_ab);
@@ -353,6 +369,9 @@ unsigned char* handshake(int sd){
     X509* server_certificate = read_certificate(std::string("Server_cert.pem"), server_cert_msg,*cert_len);
     if(!server_certificate){
         std::cout<<"Errore nella lettura del certificato del server\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         free(nonce_c);
         free(K_ab);
@@ -374,6 +393,9 @@ unsigned char* handshake(int sd){
     X509_STORE* store = build_store(std::string("CA_crl.pem"),std::string("CA_root.pem"));
     if(!store){
         std::cout<<"Errore nella creazione dello STORE\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         free(nonce_c);
         X509_free(server_certificate);
@@ -392,6 +414,9 @@ unsigned char* handshake(int sd){
     EVP_PKEY* server_RSApubkey = validate_certificate(store,server_certificate);
     if(!server_RSApubkey){
         std::cout<<"Certificato non corretto\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         free(nonce_c);
         delete username;
         X509_free(server_certificate);
@@ -414,6 +439,9 @@ unsigned char* handshake(int sd){
     unsigned char* signed_msg = (unsigned char*)malloc(NONCE_LEN + * server_DH_pubkeyLEN);
     if(!signed_msg){
         std::cout<<"Errore nell'allocazione di memoria per la firma digitale\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         EVP_PKEY_free(server_RSApubkey);
         free(nonce_c);
@@ -436,6 +464,9 @@ unsigned char* handshake(int sd){
     //verifico la firma del server. Per verificarla utilizzo la chiave pubblica del server RSA!
     if(!verify_signature(EVP_sha256(),server_signature, *sign_len, server_RSApubkey,signed_msg, signed_msg_len)){
         std::cout<<"FIRMA NON VALIDA\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         EVP_PKEY_free(server_RSApubkey);
         free(K_ab);
@@ -471,6 +502,9 @@ unsigned char* handshake(int sd){
     unsigned char* nonce_s = recv_packet<unsigned char>(sd,NONCE_LEN);
     if(!nonce_s){
         std::cout<<"Errore nella ricezione di nonce_s\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         free(K_ab);
         free(my_DH_pubkeyPEM);
@@ -485,6 +519,9 @@ unsigned char* handshake(int sd){
     signed_msg = (unsigned char*)malloc(NONCE_LEN + my_DHpubkeyLEN);
     if(!signed_msg){
         std::cout<<"Errore nell'allocazione del messaggio firmato\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         free(K_ab);
         free(my_DH_pubkeyPEM);
@@ -504,6 +541,9 @@ unsigned char* handshake(int sd){
     EVP_PKEY* my_privkeyRSA = read_RSA_privkey(std::string("rsa_priv_client.pem"));
     if(!my_privkeyRSA){
         std::cout<<"Errore nella lettura della chiave RSA privata\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         free(K_ab);
         free(sign_len);
@@ -517,6 +557,9 @@ unsigned char* handshake(int sd){
     unsigned char* client_signature = compute_signature(EVP_sha256(), signed_msg, NONCE_LEN+my_DHpubkeyLEN, my_privkeyRSA,sign_len);
     if(!client_signature){
         std::cout<<"Errore nella firma digitale\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         EVP_PKEY_free(my_privkeyRSA);
         free(K_ab);
@@ -531,6 +574,9 @@ unsigned char* handshake(int sd){
     *sign_len = htonl(*sign_len);
     if(!send_packet<uint32_t>(sd,sign_len,sizeof(uint32_t))){
         std::cout<<"Errore di invio del pacchetto\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         free(K_ab);
         free(sign_len);
@@ -541,6 +587,9 @@ unsigned char* handshake(int sd){
     *sign_len = ntohl(*sign_len);
     if(!send_packet<unsigned char>(sd,client_signature, *sign_len)){
         std::cout<<"Errore di invio del pacchetto\n";
+        remove((std::string("dh_serverpubkey.pem")).c_str());
+        remove((std::string("dh_myPUBKEY.pem")).c_str());
+        remove((std::string("Server_cert.pem")).c_str());
         delete username;
         free(K_ab);
         free(sign_len);
@@ -574,6 +623,15 @@ unsigned char* handshake(int sd){
         close(sd);
         exit(1);
     }
+
+    if(!recv_packet<unsigned char>(sd, REQ_LEN)) {
+        std::cout<<"Errore di connessione con il server\n";
+        delete username;
+        free(K_ab);
+        close(sd);
+        exit(1);
+    }
+
     std::cout<<"Connessione con il server completata\n";
     delete username;
     return K_ab;
