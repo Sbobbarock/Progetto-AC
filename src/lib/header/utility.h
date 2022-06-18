@@ -21,11 +21,10 @@
 #define MAX_PAYLOAD_SIZE (uint64_t)pow(2,8)
 
 template<class T> 
-bool send_packet(int sd, T* msg, int len){
+bool send_packet(int sd, T* buffer, int len){
     int ret = 0;
-    int tmp = 0;
     do{
-        tmp = send(sd,msg,len,0);
+        int tmp = send(sd,buffer,len,0);
         if(tmp == -1 || tmp == 0) {
             return false;
         }
@@ -37,24 +36,21 @@ bool send_packet(int sd, T* msg, int len){
 }
 
 template <class T>
-T* recv_packet(int sd,int len){
-    int ret;
-    T* buffer;
-    int dim_msg;
-
-    buffer = (T*)malloc(len);
-    if(!buffer){
+T* recv_packet(int sd, int len){
+    int res = 0;
+    T* buffer = (T*)malloc(len);
+    if(buffer==NULL){
         std::cerr<<"Buffer allocation for received packet failed\n";
         return NULL;
     }
-    ret = recv(sd,buffer,len,0);
-    if(!ret){
-        free(buffer);
-        return NULL;
+    while(res < len) {
+        int rec = recv(sd,buffer,len,0);
+        if(rec==-1) {
+            free(buffer);
+            return NULL;
+        }
+        res += rec;
     }
-    while(ret < len)
-        ret += recv(sd,buffer,len,0);
-    
     return buffer;
 }
 
@@ -133,29 +129,6 @@ bool check_string(std::string s){
     }
     return true;
 }
-
-
-/*Funzione che svuota la socket per ripristinare la connessione*/
-void clean_socket(int sd){
-    
-    std::cout<<"Ripristino della connessione in corso...\n";
-    fcntl(sd, F_SETFL, fcntl(sd, F_GETFL, 0) | O_NONBLOCK);
-    unsigned char* buffer = (unsigned char*)malloc(500);
-    int ret = recv(sd,buffer,500,0);
-    while(ret != -1){
-        ret = recv(sd,buffer,500,0);
-        if(ret < 500){
-            usleep(60000);
-            ret = recv(sd,buffer,500,0);
-        }
-    }
-    fcntl(sd, F_SETFL, fcntl(sd, F_GETFL, 0));
-    free(buffer);
-    std::cout<<"Ripristino completato";
-    std::cout<<std::endl;
-    return;
-}
-
 
 /*Funzione che costruisce la AAD di un pacchetto standard:  
   1) counter 
@@ -433,9 +406,27 @@ bool send_data_packet(unsigned char* data, unsigned char* key,int sd, uint64_t* 
 unsigned char* receive_data_packet(int sd,uint64_t* counter,unsigned char* key,uint32_t* plaintext_len){
 
     uint32_t* data_len = recv_packet<uint32_t>(sd,sizeof(uint32_t));
+    if(!data_len) {
+        return NULL;
+    }
     unsigned char* aad = recv_packet<unsigned char>(sd,AAD_LEN);
+    if(!aad) {
+        free(data_len);
+        return NULL;
+    }
     unsigned char* payload = recv_packet<unsigned char>(sd,*data_len);
+    if(!payload) {
+        free(data_len);
+        free(aad);
+        return NULL;
+    }
     unsigned char* tag = recv_packet<unsigned char>(sd,16);
+    if(!tag) {
+        free(data_len);
+        free(aad);
+        free(payload);
+        return NULL;
+    }
 
     uint64_t received_count;
     unsigned char* iv = (unsigned char*)malloc(12);
@@ -497,8 +488,6 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
             free(plaintext_len);
             fclose(file);
             remove(filename.c_str());
-            (*counter) += num_packets - (i+1);
-            clean_socket(sd);
             return false;
         }
         uint32_t ret;
@@ -565,7 +554,10 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
             fread(data,1,MAX_PAYLOAD_SIZE,file);
             data_len = MAX_PAYLOAD_SIZE;
         }
-        send_data_packet(data,key,sd,counter,data_len);
+        if(!send_data_packet(data,key,sd,counter,data_len)) {
+            free(data);
+            return false;
+        }
         progress = (float)i/num_packets;
         if(num_packets == 1) {
             progress = 0.999;

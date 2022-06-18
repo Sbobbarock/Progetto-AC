@@ -2,7 +2,7 @@
 
 
 
-//Meotod per creare la chiave privata
+//Metodo per creare la chiave privata
 EVP_PKEY* DH_privkey(){
     EVP_PKEY* dh_params = EVP_PKEY_new();
     if(!dh_params) return NULL;

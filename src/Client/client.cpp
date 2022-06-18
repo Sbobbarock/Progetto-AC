@@ -714,14 +714,26 @@ void list(int sd, unsigned char* key, uint64_t* counter){
     //creo una richiesta standard di list 
     if(!send_std_packet(msg, key,sd,counter,id,num_packets)){
         std::cout<<"L'operazione non è terminata con successo\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     //ricevo la risposta dal server 
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
         std::cout<<"Errore nella ricezione della risposta dal server\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
@@ -735,8 +747,6 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -761,9 +771,13 @@ void list(int sd, unsigned char* key, uint64_t* counter){
         if(!plaintext){
             free(plaintext);
             free(plaintext_len);
-            clean_socket(sd);
-            (*counter) += num_packets - (i+1);
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
         }
         plaintext[*plaintext_len - 1] = '\0';
         
@@ -783,7 +797,13 @@ void list(int sd, unsigned char* key, uint64_t* counter){
     //invio un pacchetto standard di done
     if(!send_std_packet(list, key,sd,counter,id,num_packets)){
         std::cout<<"Errore nell'invio del pacchetto DONE\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     return;
 }
@@ -838,14 +858,26 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     //invio un pacchetto di richiesta standard di upload
     if(!send_std_packet(filename, key,sd,counter,id,num_packets)){
         std::cout<<"Errore nell'invio del pacchetto standard\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     //ricevo la risposta dal server 
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
         std::cout<<"Errore nella ricezione della risposta dal server\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
@@ -859,8 +891,6 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -881,14 +911,26 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
     std::cout<<"Uploading "<<'"'<<filename<<'"'<<"..."<<std::endl;
     if(!read_transfer_op("",num_packets,file_len, filename,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     
     //attendo al ricezione del pacchetto done
     unsigned char* request = wait_for_done(sd);
     if(!request){
-        std::cout<<"Upload fallita"<<std::endl;
-        return;
+        std::cout<<"Upload failed"<<std::endl;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     
     unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
@@ -903,8 +945,6 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
         free(req_payload);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     free(request);
@@ -942,14 +982,26 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     uint32_t num_packets = 0;
     if(!send_std_packet(filename, key,sd,counter,id,num_packets)){
         std::cout<<"Errore nell'invio del pacchetto standard\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     //ricevo la risposta del server 
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
         std::cout<<"Errore nella ricezione della risposta dal server\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
@@ -963,8 +1015,6 @@ void download(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -985,7 +1035,13 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     std::cout<<"Downloading "<<'"'<<filename<<'"'<<"..."<<std::endl;
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     std::cout<<std::endl;
@@ -1000,7 +1056,13 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     //invio un pacchetto di done al server 
     if(!send_std_packet(filename, key,sd,counter,id,num_packets)){
         std::cout<<"Errore nell'invio del pacchetto standard\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     return;
 }
@@ -1024,14 +1086,26 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
     //invio il pacchetto standard per la richiesta di RENAME
     if(!send_std_packet(old_filename,key,sd,counter,id,num_packets)){
         std::cout<<"Errore nell'invio del pacchetto standard\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     //leggo la risposta del server
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
         std::cout<<"Errore nella ricezione della risposta dal server\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
@@ -1045,8 +1119,6 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     
@@ -1071,27 +1143,59 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
 
 
     //ne controllo la validità
-    if(!check_string(new_filename))
+    if(!check_string(new_filename)) {
+        new_filename = "Stringa non valida";
+        new_filename.resize(SIZE_FILENAME);
+        id = 8;
+        if(!send_std_packet(new_filename,key,sd,counter,id,num_packets)){
+            std::cout<<"Errore nell'invio del nuovo filename al server\n";
+            free(plaintext);
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
+        }
         return;
+    }
 
 
-    //invio al server un pacchetto data contente il nuovo filename 
-    if(!send_data_packet((unsigned char*)new_filename.c_str(),key,sd,counter,new_filename.length()+1)){
+    //invio al server un pacchetto data contente il nuovo filename
+    id = 4;
+    new_filename.resize(SIZE_FILENAME);
+    if(!send_std_packet(new_filename,key,sd,counter,id,num_packets)){
         std::cout<<"Errore nell'invio del nuovo filename al server\n";
         free(plaintext);
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     //aspetto la risposta dal server
     response = wait_for_done(sd);
+    if(!response) {
+        std::cout<<"Rename failed\n"<<std::endl;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(plaintext);
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
+    }
 
     //leggo la risposta del server e ne estrapolo i parametri 
     if(!read_request_param(response,counter,&num_packets,&id,plaintext,key)){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     free(response);
@@ -1129,7 +1233,13 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
     uint32_t num_packets = 0;
     if(!send_std_packet(filename, key,sd,counter,id,num_packets)){ //invio richiesta standard per effettuare una delete di dimensione num_packets
         std::cout<<"Errore nell'invio della richiesta standard\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     //ricevo il pacchetto di risposta 
@@ -1150,8 +1260,6 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets + 1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -1181,7 +1289,13 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         //in caso di no allora invio al server un pacchetto standard di errore per comunicare che la delete è stato annullata 
         if(!send_std_packet(filename,key,sd,counter,id,num_packets)){
             std::cout<<"Errore nell'invio della conferma di DELETE\n";
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
         }
         std::cout<<"Delete annullata\n";
         return;
@@ -1193,23 +1307,42 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         //in caso di conferma invio al server un nuovo pacchetto per confermare che la delete deve essere effettuata 
         if(!send_std_packet(filename,key,sd,counter,id,num_packets)){
             std::cout<<"Errore nell'invio della conferma di DELETE\n";
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
         }
     }
     else { // ERROR
         filename = "Errore sconosciuto";
         filename.resize(SIZE_FILENAME);
         id = 8;
-        if(!send_std_packet(filename,key,sd,counter,id,num_packets))
+        if(!send_std_packet(filename,key,sd,counter,id,num_packets)) {
             std::cout<<"Errore nell'invio della conferma di DELETE\n";
-        return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
+        }
     }
 
     //parametri da leggere nel pacchetto di richiesta
     unsigned char* request = wait_for_done(sd);
     if(!request){
         std::cout<<"Delete failed\n"<<std::endl;
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
     if(!req_payload){
@@ -1223,8 +1356,6 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
         free(req_payload);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     free(req_payload);
@@ -1251,14 +1382,26 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
     //invio la richiesta di logout al server 
     if(!send_std_packet(msg, key,sd,counter,id,num_packets)){
         std::cout<<"Errore nell'invio della richiesta al server\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
 
     //ricevo la risposta dal server
     unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!response){
         std::cout<<"Errore nella malloc\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        free(counter);
+        close(sd);
+        exit(1);
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
@@ -1272,8 +1415,6 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(response);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets + 1;
         return;
     }
     plaintext[SIZE_FILENAME - 1] = '\0';
@@ -1306,7 +1447,13 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
         //invio la richietsa standard con ID = 8 che annulla il logout 
         if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
             std::cout<<"Errore nell'invio della conferma di logout\n";
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
         }
         std::cout<<"Logout annullato\n";
         return;
@@ -1319,16 +1466,29 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
         //invio la richiesta standard che conferma il logout 
         if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
             std::cout<<"Errore nell'invio della conferma di logout\n";
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
         }
     }
     else { // ERROR
         msg = "Errore sconosciuto";
         msg.resize(SIZE_FILENAME);
         id = 8;
-        if(!send_std_packet(msg,key,sd,counter,id,num_packets))
+        if(!send_std_packet(msg,key,sd,counter,id,num_packets)) {
             std::cout<<"Errore nell'invio della conferma di logout\n";
-        return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            free(counter);
+            close(sd);
+            exit(1);
+        }
     }
 
     std::cout<<"Logout eseguito\n";
@@ -1412,19 +1572,19 @@ int main(int n_args, char** args){
 
     sd = socket(AF_INET,SOCK_STREAM,0);
     if(sd == -1){
-        perror("Error:");
+        perror("Socket creation error:");
         exit(1);
     }
     memset(&server,0,sizeof(server));
     server.sin_family = AF_INET;
     server.sin_port = htons(porta);
     if(inet_pton(AF_INET,IP,&server.sin_addr) != 1){
-        perror("Error:");
+        perror("Socket connect error:");
         exit(1);
     }
     ret = connect(sd,(struct sockaddr*)&server,sizeof(server));
     if(ret == -1){
-        perror("Error:");
+        perror("Socket connect error:");
         exit(1);
     }
     std::cout<< "░█████╗░██╗░░░░░██╗███████╗███╗░░██╗████████╗\n"

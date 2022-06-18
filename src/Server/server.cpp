@@ -518,7 +518,6 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         #pragma optimize("", on)
         free(key);
         disconnect(sd);
-        return;
     }
     rewinddir(dir);
  
@@ -539,7 +538,6 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
                 #pragma optimize("", on)
                 free(key);
                 disconnect(sd);
-                return;
             }
         }
     }
@@ -549,7 +547,11 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     unsigned char* request = wait_for_done(sd);
     if(!request){
         std::cout<<"List failed"<<std::endl;
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
     }
 
     //attendo la richiesta nuova del client 
@@ -565,8 +567,6 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
         free(req_payload);
-        clean_socket(sd);
-        (*counter) += num_packets +1;;
         return;
     }
     free(request);
@@ -613,14 +613,17 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         #pragma optimize("", on)
         free(key);
         disconnect(sd);
-        return;
     }
 
     //ricevo iterativamente i pacchetti data dal client
     std::string filename = (*username + "/" + (char*)plaintext).c_str();
     if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
     }
 
     std::cout<<std::endl;
@@ -709,13 +712,21 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         //invio iterativamente i pacchetti data al client 
         if(!read_transfer_op(*username, num_packets, file_len, filename, sd, key, counter)) {
             std::cout<<":("<<std::endl;
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
         }
         std::cout<<std::endl;
         unsigned char* request = wait_for_done(sd);
         if(!request){
             std::cout<<"Download failed"<<std::endl;
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
         }
 
         //parametri da leggere nel pacchetto di richiesta
@@ -732,8 +743,6 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
-            clean_socket(sd);
-            (*counter) += num_packets +1;
             return;
         }
         free(request);
@@ -805,26 +814,46 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         disconnect(sd);
     }
 
-
-    uint32_t* plaintext_len = (uint32_t*)malloc(sizeof(uint32_t));
-
     //leggo il nuovo filename dalla richiesta del client 
-    unsigned char* new_filename = receive_data_packet(sd,counter,key,plaintext_len);
-    if(!new_filename){
-        free(plaintext_len);
-        clean_socket(sd);
-        (*counter)++;
+
+    unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!request){
+        std::cout<<"Delete failed"<<std::endl;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
+    }
+    unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
+    if(!req_payload){
+        std::cout<<"Errore nella malloc\n";
+        free(request);
         return;
     }
-    *(new_filename + *plaintext_len - 1) = '\0';
-    std::string new_filename_string = std::string((char*)new_filename);
+
+    //estrapolo i parametri della risposta del client 
+    if(!read_request_param(request,counter,&num_packets,&id,req_payload,key)){
+        std::cout<<"Impossibile leggere correttamente la richiesta\n";
+        free(request);
+        free(req_payload);
+        return;
+    }
+    free(request);
+    
+    if(id == 8){
+        std::cout<<"Errore: "<<(char*)req_payload<<std::endl;
+        return;
+    }
+    std::string new_filename = std::string((char*)req_payload);
+    free(req_payload);
 
     //ne controllo la validità
-    if(!check_string(new_filename_string)){
+    if(!check_string(new_filename)){
         id = 8;
         msg = std::string("Filename non valido");
     }
-    else if(rename( (*username + "/" + old_filename).c_str() ,(*username + "/" + new_filename_string).c_str())){
+    else if(rename( (*username + "/" + old_filename).c_str() ,(*username + "/" + new_filename).c_str())){
         id = 8;
         msg = std::string("Impossibile rinominare il file");
     }
@@ -833,8 +862,6 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         msg = std::string("");
     }
     msg.resize(SIZE_FILENAME);
-    free(new_filename);
-    free(plaintext_len);
     //invio un pacchetto di ACK al client per confermare che l'operazione ha avuto successo
     if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
         #pragma optimize("", off)
@@ -901,7 +928,11 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
         unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
         if(!request){
             std::cout<<"Delete failed"<<std::endl;
-            return;
+            #pragma optimize("", off)
+            memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+            #pragma optimize("", on)
+            free(key);
+            disconnect(sd);
         }
         unsigned char* req_payload = (unsigned char*)malloc(SIZE_FILENAME);
         if(!req_payload){
@@ -915,8 +946,6 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
             free(req_payload);
-            clean_socket(sd);
-            (*counter) += num_packets +1;
             return;
         }
         free(request);
@@ -980,7 +1009,11 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
     unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!request){
         std::cout<<"Errore nella ricezione della richiesta\n";
-        return;
+        #pragma optimize("", off)
+        memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
+        #pragma optimize("", on)
+        free(key);
+        disconnect(sd);
     }
     unsigned char* plaintext = (unsigned char*)malloc(SIZE_FILENAME);
     if(!plaintext){
@@ -994,8 +1027,6 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
         std::cout<<"Impossibile leggere correttamente la richiesta\n";
         free(request);
         free(plaintext);
-        clean_socket(sd);
-        (*counter) += num_packets +1;
         return;
     }
     free(request);
@@ -1055,8 +1086,6 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
             std::cout<<"Impossibile leggere correttamente la richiesta\n";
             free(request);
             free(plaintext);
-            clean_socket(sd);
-            (*counter) += num_packets +1;
             return;
         }
         free(request);
@@ -1140,7 +1169,7 @@ int main(int n_args, char** args){
     /* inizializzo socket listener */
     listener = socket(AF_INET,SOCK_STREAM,0);
     if(listener == -1){
-        perror("Error: ");
+        perror("Socket init error: ");
         exit(1);
     }
     memset(&server,0,sizeof(struct sockaddr_in));
@@ -1149,17 +1178,14 @@ int main(int n_args, char** args){
     server.sin_port = htons(porta);
 
     if(bind(listener,(struct sockaddr*)&server,sizeof(server)) == -1){
-        perror("Error: ");
+        perror("Socket bind error: ");
         exit(1);
     }
     if(listen(listener,MAX_CONNECTED) == -1){
-        perror("Error: ");
+        perror("Socket listen error: ");
         exit(1);
     }
 
-    FD_ZERO(&MASTER);
-    FD_ZERO(&READY);
-    FD_SET(listener,&MASTER);
     std::cout<< "░██████╗███████╗██████╗░██╗░░░██╗███████╗██████╗░\n"
                 "██╔════╝██╔════╝██╔══██╗██║░░░██║██╔════╝██╔══██╗\n"
                 "╚█████╗░█████╗░░██████╔╝╚██╗░██╔╝█████╗░░██████╔╝\n"
@@ -1168,6 +1194,9 @@ int main(int n_args, char** args){
                 "╚═════╝░╚══════╝╚═╝░░╚═╝░░░╚═╝░░░╚══════╝╚═╝░░╚═╝"<<std::endl;
     max_fd = listener;
     while(1){
+        FD_ZERO(&MASTER);
+        FD_ZERO(&READY);
+        FD_SET(listener,&MASTER);
         READY = MASTER;
         select(max_fd+1, &READY, NULL, NULL, NULL);
         for(i = 0; i <= max_fd; i++){
@@ -1185,7 +1214,7 @@ int main(int n_args, char** args){
 
                 *client_sd = accept(listener,(struct sockaddr*)&client,&addrlen);
                 if(*client_sd == -1){
-                    perror("Error: ");
+                    perror("Socket accept error: ");
                     close(listener);
                     free(client_sd);
                     exit(1);
