@@ -683,7 +683,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         
             if(!file_len && ftell(file)){
                 id = 8;
-                msg = std::string("File troppo grande");
+                msg = std::string("File troppo grande o vuoto");
                 msg.resize(SIZE_FILENAME);
             }
             else{

@@ -840,7 +840,7 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         file_len = (ftell(file) > UINT32_MAX)? 0: ftell(file);
 
         if(!file_len && ftell(file)){
-            std::cout<<"File troppo grande"<<std::endl;
+            std::cout<<"File troppo grande o vuoto"<<std::endl;
             return;
         }
         else{
