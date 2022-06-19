@@ -490,8 +490,7 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
             remove(filename.c_str());
             return false;
         }
-        uint32_t ret;
-        ret = fwrite(plaintext,1,*plaintext_len,file);
+        fwrite(plaintext,1,*plaintext_len,file);
         progress = (float)i/num_packets;
         if(num_packets == 1) {
             progress = 0.999;
@@ -534,7 +533,6 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
     }
     unsigned char* data;
     uint32_t data_len;
-    uint32_t payload_len;
     float progress = 0.0;
     int barWidth = 70;
     int pos = barWidth * progress;

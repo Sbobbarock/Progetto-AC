@@ -19,9 +19,7 @@
   7) Sessione stabilita
 */
 unsigned char* handshake(int sd){
-    int ret;
     uint32_t* len;
-    unsigned char* buffer;
     unsigned char* nonce_c;
     std::string* username = new std::string();
 
@@ -1557,7 +1555,6 @@ int main(int n_args, char** args){
     int porta;
     int ret;
     int sd; //socket id
-    socklen_t len;
     struct sockaddr_in server;
 
     if(n_args != 2){

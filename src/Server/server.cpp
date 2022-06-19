@@ -33,7 +33,6 @@ void disconnect(int sd){
 */
 unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
 
-    int ret = 0;
     std::string client_check;
     unsigned char* nonce_c;
     uint32_t* len;
@@ -523,7 +522,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
  
 
     //invio iterativamente i pacchetti data al client che contengono la lista
-    for (int i = 0; i < num_packets; i++) {
+    for (unsigned int i = 0; i < num_packets; i++) {
         if ((dirent = readdir(dir)) != NULL) {
             if (i == num_packets-1) {
                 plaintext = "└── " + (std::string)dirent->d_name + "\n";
@@ -652,7 +651,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
     uint8_t id;
     std::string msg;
     uint64_t file_len;
-    uint32_t num_packets;
+    uint32_t num_packets = 1;
 
     *(plaintext + SIZE_FILENAME -1 ) = '\0';
 
@@ -1145,7 +1144,6 @@ int main(int n_args, char** args){
     int porta; /*porta del server */
     int listener; /* socket listener TCP */
     int* client_sd;
-    socklen_t len;
     struct sockaddr_in server, client;
     int ret; /*controllo errori */
 

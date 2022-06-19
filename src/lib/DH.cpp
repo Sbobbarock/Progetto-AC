@@ -38,7 +38,7 @@ unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub
     }
 
     //ricavo la chiave pubblica dalla chiave privata DH
-    int ret = PEM_write_PUBKEY(pubkey_PEM,my_privkey);
+    uint32_t ret = PEM_write_PUBKEY(pubkey_PEM,my_privkey);
     if(ret != 1){
         std::cout<<"Errore nella generazione della chiave pubblica\n";
         fclose(pubkey_PEM);
@@ -83,7 +83,7 @@ EVP_PKEY* DH_derive_pubkey(std::string filename,unsigned char* buffer,uint32_t f
     }
     
     //scrivo la chiave pubblica ricevuta nel file PEM
-    int ret = fwrite(buffer,1,file_len,pubkey_PEM);
+    uint32_t ret = fwrite(buffer,1,file_len,pubkey_PEM);
     if(ret < file_len){
         std::cout<<"Errore scrittura del file PEM\n";
         fclose(pubkey_PEM);
@@ -147,8 +147,7 @@ unsigned char* session_key(const EVP_MD* Hash_type,const EVP_CIPHER* Cipher_type
         return NULL;
     }
     EVP_MD_CTX_free(ctx);
-
-    if(*digest_len > EVP_CIPHER_key_length(Cipher_type)){
+    if(*digest_len > (unsigned int)EVP_CIPHER_key_length(Cipher_type)){
         unsigned char* digest = (unsigned char*)malloc(EVP_CIPHER_key_length(Cipher_type));
         if(!digest){
             free(full_digest);
