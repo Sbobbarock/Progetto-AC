@@ -45,7 +45,7 @@ T* recv_packet(int sd, int len){
     }
     while(res < len) {
         int rec = recv(sd,buffer,len,0);
-        if(rec==-1) {
+        if(rec==-1 || rec == 0) {
             free(buffer);
             return NULL;
         }
