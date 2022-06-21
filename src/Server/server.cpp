@@ -447,24 +447,45 @@ unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
     memcpy(signed_msg,nonce_s,NONCE_LEN);
     memcpy(signed_msg + NONCE_LEN, client_DH_pubkeyPEM, *client_DH_pubkeyLEN);
     free(nonce_s);
+    free(client_DH_pubkeyPEM);
 
     //controllo la firma del client
-    if( !verify_signature( EVP_sha256(),client_signature, *client_signature_len, read_RSA_pubkey(*username),signed_msg, NONCE_LEN + *client_DH_pubkeyLEN) ){
+    EVP_PKEY* rsa_pubkey = read_RSA_pubkey(*username);
+    if( !verify_signature( EVP_sha256(),client_signature, *client_signature_len, rsa_pubkey,signed_msg, NONCE_LEN + *client_DH_pubkeyLEN) ){
         std::cout<<"FIRMA NON VALIDA\n";
         remove((std::string("dh_myPUBKEY")+(*username)+".pem").c_str());
         remove((std::string("dh_")+(*username)+"pubkey.pem").c_str());
         free(K_ab);
         free(signed_msg);
+        EVP_PKEY_free(rsa_pubkey);
         free(client_signature);
         free(client_signature_len);
         disconnect(sd);
     }
+    EVP_PKEY_free(rsa_pubkey);
     free(client_signature_len);
     free(signed_msg);
     free(client_signature);
 
     uint64_t* tmp_counter = (uint64_t*)malloc(sizeof(uint64_t));
-    send_std_packet("",K_ab,sd,tmp_counter,0,0);
+    if(!tmp_counter) {
+        remove((std::string("dh_myPUBKEY")+(*username)+".pem").c_str());
+        remove((std::string("dh_")+(*username)+"pubkey.pem").c_str());
+        free(client_DH_pubkeyLEN);
+        free(nonce_s);
+        free(K_ab);
+        
+        free(client_signature);
+        free(client_signature_len);
+        disconnect(sd);
+    }
+    *tmp_counter = 0;
+    std::string tmp_filename = "";
+    tmp_filename.reserve(SIZE_FILENAME);
+    tmp_filename.resize(SIZE_FILENAME);
+    send_std_packet(tmp_filename,K_ab,sd,tmp_counter,0,0);
+    free(tmp_counter);
+    free(client_DH_pubkeyLEN);
 
     //rimuovo le chiavi effimere
     if(remove((std::string("dh_myPUBKEY")+(*username)+".pem").c_str())){
@@ -485,7 +506,8 @@ unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
 //Funzione che gestisce l'operazione di list
 void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     uint8_t id;
-    std::string plaintext;
+    std::string plaintext = "";
+    plaintext.reserve(SIZE_FILENAME);
     uint32_t num_packets = 0;
     struct dirent *dirent;
     DIR *dir;
@@ -510,6 +532,7 @@ void list(unsigned char* key, int sd,uint64_t* counter,std::string* username){
     while ((dirent = readdir(dir)) != NULL) {
         num_packets++;
     }
+    plaintext.resize(SIZE_FILENAME);
     if(!send_std_packet(plaintext,key,sd,counter,0,num_packets)){
         std::cout<<"Errore nell'invio del pacchetto standard\n";
         #pragma optimize("", off)
@@ -589,6 +612,7 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 
     id = 0; //ID ack
     msg = std::string("");
+    msg.reserve(SIZE_FILENAME);
     msg.resize(SIZE_FILENAME);
 
     *(plaintext + SIZE_FILENAME -1 ) = '\0';
@@ -630,6 +654,7 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 
     //invio messaggio DONE
     filename = std::string("");
+    filename.reserve(SIZE_FILENAME);
     filename.resize(SIZE_FILENAME);
     id = 7; //ID di done
     num_packets = 0;
@@ -650,6 +675,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
 
     uint8_t id;
     std::string msg;
+    msg.reserve(SIZE_FILENAME);
     uint64_t file_len;
     uint32_t num_packets = 1;
 
@@ -763,6 +789,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 
     uint8_t id;
     std::string msg;
+    msg.reserve(SIZE_FILENAME);
     uint32_t num_packets = 0;
 
     *(plaintext + SIZE_FILENAME -1) = '\0';
@@ -842,6 +869,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     
     if(id == 8){
         std::cout<<"Errore: "<<(char*)req_payload<<std::endl;
+        free(req_payload);
         return;
     }
     std::string new_filename = std::string((char*)req_payload);
@@ -878,6 +906,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counter,std::string* username){
     uint8_t id;
     std::string msg;
+    msg.reserve(SIZE_FILENAME);
     uint32_t num_packets = 0;
 
     //controllo se il filename ricevuto sia consistente
@@ -993,8 +1022,9 @@ void logout(unsigned char* key, int sd,uint64_t* counter){
 
     uint8_t id = 0;
     std::string msg = "";
-    uint32_t num_packets = 0;
+    msg.reserve(SIZE_FILENAME);
     msg.resize(SIZE_FILENAME);
+    uint32_t num_packets = 0;
 
     //invio un pacchetto di ACK al client 
     if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
@@ -1090,33 +1120,45 @@ void wait_request(int sd, uint64_t* counter, unsigned char* key,std::string* use
         free(request);
 
         switch(id){
-            case 1: list(key,sd,counter,username);
+            case 1: 
+                list(key,sd,counter,username);
+                free(plaintext);
                 break;
-            case 2: upload(plaintext,key,sd,counter,username,num_packets); 
+            case 2: 
+                upload(plaintext,key,sd,counter,username,num_packets); 
+                free(plaintext);
                 break;
-            case 3: download(plaintext,key,sd,counter,username); 
+            case 3: 
+                download(plaintext,key,sd,counter,username); 
+                free(plaintext);
                 break;
-            case 4: rename(plaintext,key,sd,counter,username); 
+            case 4: 
+                rename(plaintext,key,sd,counter,username); 
+                free(plaintext);
                 break;
-            case 5: delete_file(plaintext,key,sd,counter,username); 
+            case 5: 
+                delete_file(plaintext,key,sd,counter,username);
+                free(plaintext);
                 break;
-            case 6: logout(key,sd,counter); 
+            case 6: 
+                free(plaintext);
+                logout(key,sd,counter);
                 break;
             default: 
+                free(plaintext);
                 break;
         }
-        free(plaintext);
     }
 }
 
 // routine eseguita dal thread
 void* manageConnection(void* s){
 
-    std::string* username = new std::string();
+    std::string username = "";
     int sd = *((int*)s);
-    unsigned int key_len;
+    unsigned int key_len = 0;
  
-    unsigned char* K_ab = handshake(sd,&key_len,username);
+    unsigned char* K_ab = handshake(sd,&key_len,&username);
     while(true){
         uint64_t* counter = (uint64_t*)malloc(sizeof(uint64_t));
         if(!counter){
@@ -1127,7 +1169,7 @@ void* manageConnection(void* s){
             disconnect(sd);
         }
         *counter = 0;
-        wait_request(sd,counter,K_ab,username);
+        wait_request(sd,counter,K_ab,&username);
     }
     #pragma optimize("", off)
     memset(K_ab, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
@@ -1143,8 +1185,9 @@ int main(int n_args, char** args){
     int i;
     int porta; /*porta del server */
     int listener; /* socket listener TCP */
-    int* client_sd;
+    int* client_sd = (int *)malloc(sizeof(int));
     struct sockaddr_in server, client;
+    socklen_t addrlen = sizeof(client);
     int ret; /*controllo errori */
 
     /* variabili multiplexing I/O */
@@ -1201,8 +1244,6 @@ int main(int n_args, char** args){
             if(!FD_ISSET(i,&READY))
                 continue;
             else if(i == listener){ /* richiesta di connessione al server */
-                socklen_t addrlen = sizeof(client);
-                client_sd = (int *)malloc(sizeof(int));
 
                 if(!client_sd){
                     close(listener);
@@ -1223,6 +1264,7 @@ int main(int n_args, char** args){
                     close(listener);
                     free(client_sd);
                 }
+                pthread_detach(thread_id);
             }
         }
     }

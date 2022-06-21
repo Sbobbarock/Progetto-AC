@@ -5,8 +5,16 @@
 //Metodo per creare la chiave privata
 EVP_PKEY* DH_privkey(){
     EVP_PKEY* dh_params = EVP_PKEY_new();
-    if(!dh_params) return NULL;
-    if(!EVP_PKEY_set1_DH(dh_params, DH_get_2048_224())) return NULL;
+    if(!dh_params) {
+        return NULL;
+    }
+    DH* low_params = DH_get_2048_224();
+    if(!EVP_PKEY_set1_DH(dh_params, low_params)) {
+        DH_free(low_params);
+        EVP_PKEY_free(dh_params);
+        return NULL;
+    }
+    DH_free(low_params);
     EVP_PKEY_CTX* dh_ctx = EVP_PKEY_CTX_new(dh_params,NULL);
     if(!dh_ctx){
         EVP_PKEY_free(dh_params);
@@ -64,10 +72,6 @@ unsigned char* DH_pubkey(std::string filename,EVP_PKEY* my_privkey,EVP_PKEY* pub
         free(buffer);
         return NULL;
     }
-    
-    rewind(pubkey_PEM);
-    pub_key = PEM_read_PUBKEY(pubkey_PEM,NULL,NULL,NULL);
-
     fclose(pubkey_PEM);
     return buffer;
 }

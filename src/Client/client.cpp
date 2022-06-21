@@ -43,6 +43,7 @@ unsigned char* handshake(int sd){
     }while(!check_string(*username) || (*username).length() > MAX_USERNAME);
 
     //standardizzo la lunghezza del nome utente
+    (*username).reserve(MAX_USERNAME);
     (*username).resize(MAX_USERNAME);
 
     //invio nonce e nome utente
@@ -91,7 +92,7 @@ unsigned char* handshake(int sd){
     2) Ricavo la coppia di chiavi (privata, pubblica) di DH
        - calcolo la chiave privata effiemera di DH 
        - ricavo la chiave pubblica di DH 
-       - invio la chiave pubbllica del client al server in un file PEM 
+       - invio la chiave pubblica del client al server in un file PEM 
     *************************************************/
 
     //inizializzazione parametri DH e chiave privata
@@ -621,15 +622,15 @@ unsigned char* handshake(int sd){
         close(sd);
         exit(1);
     }
-
-    if(!recv_packet<unsigned char>(sd, REQ_LEN)) {
+    unsigned char* response = recv_packet<unsigned char>(sd,REQ_LEN);
+    if(!response) {
         std::cout<<"Errore di connessione con il server\n";
         delete username;
         free(K_ab);
         close(sd);
         exit(1);
     }
-
+    free(response);
     std::cout<<"Connessione con il server completata\n";
     delete username;
     return K_ab;
@@ -707,6 +708,7 @@ void list(int sd, unsigned char* key, uint64_t* counter){
     uint8_t id = 1;
     uint32_t num_packets = 0;
     std::string msg = "";
+    msg.reserve(SIZE_FILENAME);
     msg.resize(SIZE_FILENAME);
 
     //creo una richiesta standard di list 
@@ -788,6 +790,7 @@ void list(int sd, unsigned char* key, uint64_t* counter){
 
     //invio messaggio DONE
     list = std::string("");
+    list.reserve(SIZE_FILENAME);
     list.resize(SIZE_FILENAME);
     id = 7; //ID di done
     num_packets = 0;
@@ -821,12 +824,12 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         return;
 
     uint8_t id;
-    std::string msg;
     uint64_t file_len;
     uint32_t num_packets;
 
     //controllo che il file selezionato esista 
-    FILE* file = fopen(filename.c_str(),"r");
+    std::string filepath = "Storage/" + filename;
+    FILE* file = fopen(filepath.c_str(),"r");
     if(!file){
         std::cout<<"File non esistente"<<std::endl;
         return;
@@ -841,12 +844,9 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
             std::cout<<"File troppo grande o vuoto"<<std::endl;
             return;
         }
-        else{
-            msg = std::string("");
-            msg.resize(SIZE_FILENAME);
-        }
         fclose(file);
     }
+    filename.reserve(SIZE_FILENAME);
     filename.resize(SIZE_FILENAME);
 
     id = 2;
@@ -972,6 +972,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     if(!check_string(filename))
         return;
 
+    filename.reserve(SIZE_FILENAME);
     filename.resize(SIZE_FILENAME);
 
 
@@ -1021,17 +1022,20 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     //controllo che ID ricevuto sia di ACK
     if(id == 8){ //ricevuto errore
         std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        free(plaintext);
         return;
     }
     else if(id != 0){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        free(plaintext);
         return;
     }
     free(plaintext);
 
     //ricevo i pacchetti dal server
     std::cout<<"Downloading "<<'"'<<filename<<'"'<<"..."<<std::endl;
-    if(!write_transfer_op(filename,num_packets,sd, key, counter)) {
+    std::string filepath = std::string("Storage/").append(filename);
+    if(!write_transfer_op(filepath,num_packets,sd, key, counter)) {
         std::cout<<"Uh oh..."<<std::endl;
         #pragma optimize("", off)
         memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
@@ -1077,6 +1081,7 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
     if(!check_string(old_filename))
         return;
     
+    old_filename.reserve(SIZE_FILENAME);
     old_filename.resize(SIZE_FILENAME);
     uint8_t id = 4;
     uint32_t num_packets = 1;
@@ -1126,10 +1131,12 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
     //controllo che ID ricevuto non sia di errore 
     if(id == 8){ //ricevuto errore
         std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        free(plaintext);
         return;
     }
     else if(id != 0){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        free(plaintext);
         return;
     }
     
@@ -1139,7 +1146,7 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
     std::string new_filename;
     std::cin>>new_filename;
 
-
+    new_filename.reserve(SIZE_FILENAME);
     //ne controllo la validità
     if(!check_string(new_filename)) {
         new_filename = "Stringa non valida";
@@ -1156,6 +1163,7 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
             close(sd);
             exit(1);
         }
+        free(plaintext);
         return;
     }
 
@@ -1206,11 +1214,9 @@ void rename(int sd, unsigned char* key, uint64_t* counter){
         free(plaintext);
         return;
     }
-    else{
-        free(plaintext);
-        std::cout<<"Operazione terminata con successo\n";
-        return;
-    }
+    free(plaintext);
+    std::cout<<"Operazione terminata con successo\n";
+    return;
 }
 
 
@@ -1225,6 +1231,7 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
     if(!check_string(filename))
         return;
 
+    filename.reserve(SIZE_FILENAME);
     filename.resize(SIZE_FILENAME);
 
     uint8_t id = 5;
@@ -1266,10 +1273,12 @@ void delete_file(int sd, unsigned char* key, uint64_t* counter){
     //controllo che ID ricevuto sia corretto
     if(id == 8){ //ricevuto errore
         std::cout<<"Errore: "<<(char*)plaintext<<std::endl;
+        free(plaintext);
         return;
     }
     else if(id != 0){
         std::cout<<"Errore: pacchetto non riconosciuto"<<std::endl;
+        free(plaintext);
         return;
     }
     free(plaintext);
@@ -1374,7 +1383,8 @@ void logout(int sd, unsigned char* key, uint64_t* counter){
 
     uint8_t id = 6;
     uint32_t num_packets = 0;
-    std::string msg = "";
+    std::string msg;
+    msg.reserve(SIZE_FILENAME);
     msg.resize(SIZE_FILENAME);
 
     //invio la richiesta di logout al server 

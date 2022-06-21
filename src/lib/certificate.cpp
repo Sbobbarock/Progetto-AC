@@ -17,7 +17,8 @@ X509_STORE* build_store(std::string file_crl,std::string root_cert){
     if(!X509_STORE_add_cert(store,root)) return NULL;
     if(!X509_STORE_add_crl(store,crl)) return NULL;
     if(!X509_STORE_set_flags(store, X509_V_FLAG_CRL_CHECK)) return NULL;
-    
+    X509_free(root);
+    X509_CRL_free(crl);
     return store;
 }
 
@@ -50,10 +51,13 @@ EVP_PKEY* validate_certificate(X509_STORE* store, X509* cert){
     }
     if(X509_verify_cert(ctx) == 1){
         X509_STORE_CTX_free(ctx);
-        if(std::string(X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0)).find("O=Server") == std::string::npos){
+        char* tmp = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
+        if(std::string(tmp).find("O=Server") == std::string::npos){
+            free(tmp);
             std::cout<<"Il certificato non appertiene al server\n";
             return NULL;
-        }                                                                              
+        }
+        free(tmp);
         return X509_get_pubkey(cert);
     }
     else

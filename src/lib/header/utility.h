@@ -23,8 +23,9 @@
 template<class T> 
 bool send_packet(int sd, T* buffer, int len){
     int ret = 0;
+    int tmp = 0;
     do{
-        int tmp = send(sd,buffer,len,0);
+        tmp = send(sd,buffer,len,0);
         if(tmp == -1 || tmp == 0) {
             return false;
         }
@@ -38,13 +39,14 @@ bool send_packet(int sd, T* buffer, int len){
 template <class T>
 T* recv_packet(int sd, int len){
     int res = 0;
+    int rec = 0;
     T* buffer = (T*)malloc(len);
     if(buffer==NULL){
         std::cerr<<"Buffer allocation for received packet failed\n";
         return NULL;
     }
     while(res < len) {
-        int rec = recv(sd,buffer,len,0);
+        rec = recv(sd,buffer,len,0);
         if(rec==-1 || rec == 0) {
             free(buffer);
             return NULL;
@@ -110,8 +112,11 @@ bool send_file(int sd,std::string file){
     file_len = htonl(file_len);
     if(!send_packet<uint32_t>(sd,&file_len,sizeof(uint32_t)))
         return false;
-    if(!send_packet<unsigned char>(sd,buffer,ntohl(file_len)))
+    if(!send_packet<unsigned char>(sd,buffer,ntohl(file_len))) {
+        free(buffer);
         return false;
+    }
+    free(buffer);
     return true;
 }
 
@@ -512,8 +517,8 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
         free(plaintext);
     }
     free(plaintext_len);
-    fclose(file);
     fflush(file);
+    fclose(file);
     return true;
 }
 
@@ -522,7 +527,7 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
 bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_len, std::string filename, int sd, unsigned char* key, uint64_t* counter){
     FILE* file;
     if(username.empty()) {
-        file = fopen(filename.c_str(), "r");
+        file = fopen(("Storage/" + filename).c_str(), "r");
     }
     else {
         file = fopen((username + "/" + filename).c_str(),"r");
@@ -586,17 +591,14 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
 unsigned char* wait_for_done(int sd){
     
     fd_set READY;
-    struct timeval* timer = (timeval*)malloc(sizeof(struct timeval));
-    timer->tv_sec = 1;
+    struct timeval timer = {1, 0};
     int ret;
     FD_ZERO(&READY);
     FD_SET(sd,&READY);
-    ret = select(sd+1,&READY,NULL,NULL,timer);
+    ret = select(sd+1,&READY,NULL,NULL,&timer);
     if(!ret){
-        free(timer);
         return NULL;
     }
     
-    free(timer);
     return recv_packet<unsigned char>(sd,REQ_LEN);
 }
