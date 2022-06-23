@@ -917,11 +917,11 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         close(sd);
         exit(1);
     }
-    
+    std::cout<<std::endl;
     //attendo al ricezione del pacchetto done
     unsigned char* request = wait_for_done(sd);
     if(!request){
-        std::cout<<"Upload failed"<<std::endl;
+        std::cout<<std::endl<<"Upload failed"<<std::endl;
         #pragma optimize("", off)
         memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
         #pragma optimize("", on)
@@ -953,7 +953,6 @@ void upload(int sd, unsigned char* key, uint64_t* counter){
         std::cout<<"Errore: il server non ha ricevuto il file\n";
         return;
     }
-    std::cout<<std::endl;
     std::cout<<"Upload completato\n";
     return;
 }
@@ -1047,7 +1046,6 @@ void download(int sd, unsigned char* key, uint64_t* counter){
     }
 
     std::cout<<std::endl;
-    std::cout<<"Download completato\n";
 
     //invio messaggio DONE
     filename = std::string("");
@@ -1066,6 +1064,7 @@ void download(int sd, unsigned char* key, uint64_t* counter){
         close(sd);
         exit(1);
     }
+    std::cout<<"Download completato\n";
     return;
 }
 

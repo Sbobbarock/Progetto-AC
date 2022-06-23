@@ -20,6 +20,7 @@
 #define AAD_LEN 20
 #define MAX_PAYLOAD_SIZE (uint64_t)pow(2,20)
 
+template <class T>
 bool send_packet(int sd, T* buffer, int len){
     int tmp = 0;
     T* pointer = buffer;
@@ -38,8 +39,8 @@ bool send_packet(int sd, T* buffer, int len){
 }
 
 template <class T>
-T* recv_packet(int sd, uint32_t len){
-    uint32_t tmp = 0;
+T* recv_packet(int sd, int len){
+    int tmp = 0;
     T* buffer = (T*)malloc(len);
     T* pointer = buffer;
     if(buffer==NULL){
@@ -517,6 +518,9 @@ bool write_transfer_op(std::string filename, uint32_t num_packets, int sd, unsig
         else {
             std::cout << "] " << 100 << " %\r";
         }
+        if(i==num_packets-1) {
+            std::cout << std::endl << "Salvataggio file in corso...";
+        }
         std::cout.flush();
         free(plaintext);
     }
@@ -584,7 +588,6 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
         }
         std::cout.flush();
         free(data);
-        usleep(1);
     }
     fclose(file);
     return true;
@@ -593,14 +596,15 @@ bool read_transfer_op(std::string username, uint32_t num_packets, uint64_t file_
 
 //metodo per attendere la richesta di done
 unsigned char* wait_for_done(int sd){
-    
+    std::cout << "Waiting for done..." << std::endl;
     fd_set READY;
-    struct timeval timer = {1, 0};
+    struct timeval timer = {30, 0};
     int ret;
     FD_ZERO(&READY);
     FD_SET(sd,&READY);
     ret = select(sd+1,&READY,NULL,NULL,&timer);
     if(!ret){
+        std::cout << "Timeout!" << std::endl;
         return NULL;
     }
     

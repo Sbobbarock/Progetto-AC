@@ -20,6 +20,7 @@
 void disconnect(int sd){
     close(sd);
     std::cout<<"Client disconnected\n";
+    std::cout<<"-------------------\n";
     pthread_exit(NULL);
 }
 
@@ -500,6 +501,7 @@ unsigned char* handshake(int sd,unsigned int* key_len,std::string* username){
         free(K_ab);
         disconnect(sd);
     }
+    std::cout<<"Connessione con "<< *username << " completata\n";
     return K_ab;
 }
 
@@ -650,8 +652,6 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     }
 
     std::cout<<std::endl;
-    std::cout<<"Upload completato\n";
-
     //invio messaggio DONE
     filename = std::string("");
     filename.reserve(SIZE_FILENAME);
@@ -666,6 +666,8 @@ void upload(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
         free(key);
         disconnect(sd);
     }
+
+    std::cout<<"Upload completato\n";
     return;
 }
 
@@ -696,6 +698,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         //verifico l'esistenza del file che si dovrebbe inviare al client 
         if(!file){
             id = 8; //ID di errore 
+            std::cout << "Download: File non esistente" << std::endl;
             msg = std::string("File non esistente");
             msg.resize(SIZE_FILENAME);
             file_len = 0;
@@ -708,6 +711,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         
             if(!file_len && ftell(file)){
                 id = 8;
+                std::cout << "Download: File troppo grande o vuoto" << std::endl;
                 msg = std::string("File troppo grande o vuoto");
                 msg.resize(SIZE_FILENAME);
             }
@@ -746,7 +750,7 @@ void download(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* coun
         std::cout<<std::endl;
         unsigned char* request = wait_for_done(sd);
         if(!request){
-            std::cout<<"Download failed"<<std::endl;
+            std::cout<<std::endl<<"Download failed"<<std::endl;
             #pragma optimize("", off)
             memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
             #pragma optimize("", on)
@@ -798,6 +802,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     //controllo che il filename ricevuto sia valido 
     if(!check_string(old_filename)){
         id = 8;
+        std::cout << "Rename: Filename non valido" << std::endl;
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
         if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
@@ -814,6 +819,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
     FILE* file = fopen((*username + "/" + (char*)plaintext).c_str(),"r");
     if(!file){
         id = 8; //ID di errore 
+        std::cout << "Rename: File non esistente" << std::endl;
         msg = std::string("File non esistente");
         msg.resize(SIZE_FILENAME);
         if(!send_std_packet(msg,key,sd,counter,id,num_packets)){
@@ -913,6 +919,7 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
     *(plaintext + SIZE_FILENAME -1 ) = '\0';
     if(!check_string(std::string((char*)plaintext))){
         id = 8; //ID di errore 
+        std::cout << "Delete: Filename non valido" << std::endl;
         msg = std::string("Filename non valido");
         msg.resize(SIZE_FILENAME);
         if(!send_std_packet(msg,key,sd,counter,id,num_packets)){ //in caso non lo sia invio un pacchetto di errore
@@ -928,6 +935,7 @@ void delete_file(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* c
     FILE* file = fopen((*username + "/" + (char*)plaintext).c_str(),"r");
     if(!file){ //se non esiste mando il messaggio di errore 
         id = 8; //ID di errore 
+        std::cout << "Delete: File non esistente" << std::endl;
         msg = std::string("File non esistente");
         msg.resize(SIZE_FILENAME);
         if(!send_std_packet(msg,key,sd,counter,id,num_packets)){ //in caso non lo sia invio un pacchetto di errore
