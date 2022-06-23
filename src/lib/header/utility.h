@@ -18,41 +18,45 @@
 #define REQ_LEN 296
 #define STD_AAD_LEN 25
 #define AAD_LEN 20
-#define MAX_PAYLOAD_SIZE (uint64_t)pow(2,8)
+#define MAX_PAYLOAD_SIZE (uint64_t)pow(2,20)
 
-template<class T> 
 bool send_packet(int sd, T* buffer, int len){
-    int ret = 0;
     int tmp = 0;
+    T* pointer = buffer;
     do{
-        tmp = send(sd,buffer,len,0);
+        tmp = send(sd,pointer,len,0);
         if(tmp == -1 || tmp == 0) {
             return false;
         }
-        ret += tmp;
+        len -= tmp;
+        pointer += tmp;
         tmp = 0;
+        
     }
-    while(ret < len); 
+    while(len > 0); 
     return true;
 }
 
 template <class T>
-T* recv_packet(int sd, int len){
-    int res = 0;
-    int rec = 0;
+T* recv_packet(int sd, uint32_t len){
+    uint32_t tmp = 0;
     T* buffer = (T*)malloc(len);
+    T* pointer = buffer;
     if(buffer==NULL){
         std::cerr<<"Buffer allocation for received packet failed\n";
         return NULL;
     }
-    while(res < len) {
-        rec = recv(sd,buffer,len,0);
-        if(rec==-1 || rec == 0) {
-            free(buffer);
+    do{
+        tmp = recv(sd,pointer,len,0);
+        if(tmp == -1 || tmp == 0) {
             return NULL;
         }
-        res += rec;
+        len -= tmp;
+        pointer += tmp;
+        tmp = 0;
+        
     }
+    while(len > 0); 
     return buffer;
 }
 
