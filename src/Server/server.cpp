@@ -850,7 +850,7 @@ void rename(unsigned char* plaintext,unsigned char* key, int sd,uint64_t* counte
 
     unsigned char* request = recv_packet<unsigned char>(sd,REQ_LEN);
     if(!request){
-        std::cout<<"Delete failed"<<std::endl;
+        std::cout<<"Rename failed"<<std::endl;
         #pragma optimize("", off)
         memset(key, 0, EVP_CIPHER_key_length(EVP_aes_128_gcm()));
         #pragma optimize("", on)
